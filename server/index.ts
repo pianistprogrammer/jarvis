@@ -70,4 +70,4 @@ wss.on('connection', (socket) => {
   socket.on('close', () => session.cancel())
 })
 
-server.listen(config.port, '127.0.0.1', () => console.log(`Aura server listening on http://127.0.0.1:${config.port}`))
+server.listen(config.port, '127.0.0.1', () => console.log(`Jarvis server listening on http://127.0.0.1:${config.port}`))

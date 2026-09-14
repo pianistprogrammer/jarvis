@@ -6,7 +6,7 @@ check_command() {
   if command -v "$1" >/dev/null 2>&1; then echo "✓ $1: $(command -v "$1")"; else echo "✗ missing $1"; failures=$((failures + 1)); fi
 }
 
-echo "Aura system check"
+echo "Jarvis system check"
 echo "macOS: $(sw_vers -productVersion 2>/dev/null || echo unknown) · $(uname -m)"
 if [[ "$(uname -m)" == "arm64" ]]; then echo "✓ Apple silicon"; else echo "✗ Apple silicon required for local MLX models"; failures=$((failures + 1)); fi
 memory_bytes="$(sysctl -n hw.memsize 2>/dev/null || echo 0)"

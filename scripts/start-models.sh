@@ -17,7 +17,7 @@ if ! command -v llama-server >/dev/null 2>&1; then
 fi
 for port in 8000 8080; do
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
-    echo "Port $port is already in use. Stop that service or point Aura at it in .env." >&2
+    echo "Port $port is already in use. Stop that service or point Jarvis at it in .env." >&2
     exit 1
   fi
 done

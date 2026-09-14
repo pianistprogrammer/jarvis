@@ -1,8 +1,8 @@
 {
-  "name": "macos-voice-agent",
+  "name": "jarvis",
   "private": false,
   "version": "0.1.0",
-  "description": "A local-first, near real-time voice agent for Apple silicon with browser and workspace tools.",
+  "description": "Jarvis: a local-first, near real-time voice agent for Apple silicon with browser and workspace tools.",
   "license": "MIT",
   "type": "module",
   "scripts": {

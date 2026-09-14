@@ -6,8 +6,8 @@ import { executeTool } from '../server/tools.js'
 
 test('calculator and workspace file tools', async () => {
   assert.equal(await executeTool('calculator', { expression: '(12 / 3) + 7' }), '11')
-  assert.match(String(await executeTool('write_file', { path: 'test/note.txt', content: 'hello Aura' })), /Wrote 10 bytes/)
-  assert.equal(await executeTool('read_file', { path: 'test/note.txt' }), 'hello Aura')
+  assert.match(String(await executeTool('write_file', { path: 'test/note.txt', content: 'hello Jarvis' })), /Wrote 12 bytes/)
+  assert.equal(await executeTool('read_file', { path: 'test/note.txt' }), 'hello Jarvis')
   assert.match(String(await executeTool('list_files', { path: 'test' })), /note\.txt/)
   await assert.rejects(() => executeTool('read_file', { path: '../../private.txt' }), /escapes the agent workspace/)
 })

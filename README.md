@@ -1,8 +1,8 @@
-# Aura — local voice agent for Apple silicon
+# Jarvis — local voice agent for Apple silicon
 
-Aura is a near-real-time, voice-first agent that runs on an Apple silicon Mac. It listens hands-free, streams a local model, speaks by sentence, supports interruption, calls tools, and operates a persistent browser you can watch inside the UI.
+Jarvis is a near-real-time, voice-first agent that runs on an Apple silicon Mac. It listens hands-free, streams a local model, speaks by sentence, supports interruption, calls tools, and operates a persistent browser you can watch inside the UI.
 
-![Aura interface](docs/aura-interface.png)
+![Jarvis interface](docs/jarvis-interface.png)
 
 ## What is included
 
@@ -19,7 +19,7 @@ Aura is a near-real-time, voice-first agent that runs on an Apple silicon Mac. I
 
 The [Pithagoras voice demo](https://www.youtube.com/watch?v=xbedfuqYQYA) used Silero V5, Whisper.cpp, Qwen 35B-A3B through llama.cpp, and Breeze-TTS-2/audio.cpp on an RTX 3060 with 12 GB VRAM. That exact combination is CUDA-focused and is too large for an 8 GB unified-memory Mac.
 
-Aura uses the same modular cascade with Apple-native substitutions. It detects unified memory at launch and has compact and full profiles:
+Jarvis uses the same modular cascade with Apple-native substitutions. It detects unified memory at launch and has compact and full profiles:
 
 | Stage | Default | Why on 8 GB Apple silicon |
 | --- | --- | --- |
@@ -38,8 +38,8 @@ All adapters are configured in `.env`; hosted OpenAI-compatible LLM/STT/TTS endp
 Requirements: Apple silicon, macOS, Homebrew, Node.js 20+, and at least 7 GB free disk for the compact profile or 32 GB for the full profile.
 
 ```bash
-git clone https://github.com/pianistprogrammer/macos-voice-agent.git
-cd macos-voice-agent
+git clone https://github.com/pianistprogrammer/jarvis.git
+cd jarvis
 npm run setup:mac
 ```
 
@@ -96,4 +96,4 @@ Copy `.env.example` to `.env`. The important options are `LLM_BASE_URL`, `LLM_MO
 
 ## Attribution
 
-The product concept and visual interaction are inspired by [thecodacus/pithagoras](https://github.com/thecodacus/pithagoras) and Codacus’s linked demo. This repository is an original implementation because the reference repository does not currently publish a software license. Aura is MIT licensed; model weights and dependencies retain their own licenses.
+The product concept and visual interaction are inspired by [thecodacus/pithagoras](https://github.com/thecodacus/pithagoras) and Codacus’s linked demo. This repository is an original implementation because the reference repository does not currently publish a software license. Jarvis is MIT licensed; model weights and dependencies retain their own licenses.

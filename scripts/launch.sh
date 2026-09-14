@@ -19,7 +19,7 @@ for _ in $(seq 1 1800); do
     exit 1
   fi
   if curl -fsS --max-time 2 http://127.0.0.1:8000/ >/dev/null 2>&1 && curl -fsS --max-time 2 http://127.0.0.1:8080/health >/dev/null 2>&1; then
-    echo "Opening Aura at http://127.0.0.1:4100"
+    echo "Opening Jarvis at http://127.0.0.1:4100"
     npm start
     exit $?
   fi

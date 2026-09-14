@@ -175,7 +175,7 @@ function App() {
 
   return <main className={`app status-${status} ${browserOpen ? 'with-browser' : ''}`}>
     <aside className="sidebar">
-      <div className="brand"><span className="brand-mark">A</span><span>Aura</span></div>
+      <div className="brand"><span className="brand-mark">J</span><span>Jarvis</span></div>
       <button className="new-session" onClick={reset}><span>＋</span> New conversation</button>
       <div className="history-label">Today</div>
       <button className="history-item active"><span className="pulse-dot"/>Local voice session <small>{messages.length || ''}</small></button>
@@ -188,7 +188,7 @@ function App() {
       <div className="workspace">
         {browserOpen && <section className="browser-panel">
           <div className="panel-head"><div><Icon name="browser"/><span>Agent browser</span><i>LIVE</i></div><button onClick={() => setBrowserOpen(false)}>×</button></div>
-          <div className="urlbar"><span>●</span> Persistent Chromium · controlled by Aura</div>
+          <div className="urlbar"><span>●</span> Persistent Chromium · controlled by Jarvis</div>
           <img src={`/api/browser/screenshot?t=${browserTick}`} alt="Live view of the agent-controlled browser" onError={(e) => { e.currentTarget.style.opacity = '.2' }} />
         </section>}
 
