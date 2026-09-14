@@ -24,12 +24,26 @@ app.post('/api/transcribe', express.raw({ type: ['audio/wav', 'audio/webm', 'app
   const form = new FormData()
   form.set('file', new Blob([new Uint8Array(req.body)], { type: req.get('content-type') || 'audio/wav' }), 'recording.wav')
   form.set('model', config.sttModel)
-  form.set('response_format', 'json')
+  form.set('response_format', 'verbose_json')
+  form.set('word_timestamps', 'true')
+  form.set('max_tokens', '128')
+  if (config.sttLanguage) form.set('language', config.sttLanguage)
   try {
     const upstream = await fetch(config.sttUrl, { method: 'POST', body: form, signal: AbortSignal.timeout(120_000) })
     if (!upstream.ok) throw new Error(`STT returned HTTP ${upstream.status}: ${(await upstream.text()).slice(0, 240)}`)
-    const data = await upstream.json() as { text?: string }
-    res.json({ text: data.text?.trim() || '' })
+    const data = await upstream.json() as {
+      text?: string
+      segments?: Array<{ words?: Array<{ word?: string; probability?: number }> }>
+    }
+    // Rebuilding from timestamped words drops the low-confidence tokens Whisper can
+    // emit after short utterances have ended. Fall back for models without words.
+    const words = data.segments?.flatMap((segment) => segment.words || []) || []
+    const filtered = words
+      .filter((word) => word.word && (word.probability ?? 1) >= 0.01)
+      .map((word) => word.word)
+      .join('')
+      .trim()
+    res.json({ text: filtered || data.text?.trim() || '' })
   } catch (error) { res.status(502).json({ error: error instanceof Error ? error.message : String(error) }) }
 })
 app.post('/api/tts', async (req, res) => {

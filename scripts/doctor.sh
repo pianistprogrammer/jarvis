@@ -15,6 +15,7 @@ check_command node
 check_command npm
 check_command llama-server
 check_command ffmpeg
+check_command espeak-ng
 [[ -x .venv/bin/mlx_audio.server ]] && echo "✓ MLX-Audio virtual environment" || { echo "✗ missing MLX-Audio; run npm run setup:mac"; failures=$((failures + 1)); }
 [[ -d node_modules ]] && echo "✓ Node dependencies" || { echo "✗ missing Node dependencies"; failures=$((failures + 1)); }
 

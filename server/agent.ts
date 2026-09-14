@@ -60,7 +60,7 @@ export class AgentSession {
     const response = await fetch(`${config.llmBaseUrl}/chat/completions`, {
       method: 'POST', signal,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.llmApiKey}` },
-      body: JSON.stringify({ model: config.llmModel, messages: this.history, tools: toolDefinitions, tool_choice: 'auto', stream: true, temperature: 0.6, max_tokens: 1200 }),
+      body: JSON.stringify({ model: config.llmModel, messages: this.history, tools: toolDefinitions, tool_choice: 'auto', stream: true, temperature: 0.6, max_tokens: 1200, chat_template_kwargs: { enable_thinking: false } }),
     })
     if (!response.ok || !response.body) throw new Error(`LLM returned HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`)
     const reader = response.body.getReader()

@@ -32,11 +32,15 @@ case "$profile" in
   compact)
     model_ref="Qwen/Qwen3-4B-GGUF:Q4_K_M"
     context=4096
+    batch=512
+    ubatch=128
     disk_need_gb=7
     ;;
   full)
     model_ref="unsloth/Qwen3.6-35B-A3B-GGUF:UD-Q4_K_M"
     context=32768
+    batch=2048
+    ubatch=512
     disk_need_gb=32
     ;;
   *) echo "MODEL_PROFILE must be auto, compact, or full." >&2; exit 1 ;;
@@ -61,12 +65,14 @@ llama-server \
   -hf "$model_ref" \
   --alias qwen-local \
   --host 127.0.0.1 --port 8080 \
-  --ctx-size "$context" --parallel 1 --n-gpu-layers 999 --jinja --flash-attn on \
+  --ctx-size "$context" --parallel 1 --batch-size "$batch" --ubatch-size "$ubatch" \
+  --cache-type-k q8_0 --cache-type-v q8_0 --n-gpu-layers 999 --jinja --flash-attn on \
   >logs/llama-server.log 2>&1 &
 pids+=("$!")
 
-echo "Starting MLX-Audio (Whisper + Kokoro) on port 8000…"
-.venv/bin/mlx_audio.server --host 127.0.0.1 --port 8000 \
+echo "Starting MLX-Audio (Whisper + TTS) on port 8000…"
+espeak_library="$(brew --prefix espeak-ng)/lib/libespeak-ng.dylib"
+PHONEMIZER_ESPEAK_LIBRARY="$espeak_library" .venv/bin/mlx_audio.server --host 127.0.0.1 --port 8000 \
   >logs/mlx-audio.log 2>&1 &
 pids+=("$!")
 

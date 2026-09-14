@@ -16,6 +16,7 @@ done
 brew list llama.cpp >/dev/null 2>&1 || brew install llama.cpp
 brew list uv >/dev/null 2>&1 || brew install uv
 brew list ffmpeg >/dev/null 2>&1 || brew install ffmpeg
+brew list espeak-ng >/dev/null 2>&1 || brew install espeak-ng
 
 npm ci
 npx playwright install chromium

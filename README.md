@@ -9,7 +9,7 @@ Jarvis is a near-real-time, voice-first agent that runs on an Apple silicon Mac.
 - Hands-free microphone capture with local turn detection, echo-cancellation request, and barge-in
 - MLX Whisper speech-to-text through an OpenAI-compatible API
 - Qwen3 4B Q4_K_M through llama.cpp and Metal
-- Kokoro 82M 4-bit speech through MLX-Audio, with sentence-level generation/playback overlap
+- KittenTTS Nano speech through MLX-Audio, with sentence-level generation/playback overlap
 - Streaming OpenAI-compatible tool calls
 - Persistent Playwright Chromium with snapshots, click/type tools, optional domain allowlist, and live screenshots
 - Workspace-scoped file tools, calculator, time, and a guarded local shell
@@ -24,12 +24,12 @@ Jarvis uses the same modular cascade with Apple-native substitutions. It detects
 | Stage | Default | Why on 8 GB Apple silicon |
 | --- | --- | --- |
 | Turn detection | Local energy/hysteresis VAD | Zero model memory and immediate barge-in |
-| STT | `mlx-community/whisper-small-mlx-q4` | Multilingual, roughly 197 MB |
+| STT | `mlx-community/whisper-tiny.en-asr-4bit` | English, roughly 26 MB, low-latency word timestamps |
 | LLM | `Qwen/Qwen3-4B-GGUF:Q4_K_M` | Strong tool calling at roughly 2.5 GB |
-| TTS | `mlx-community/Kokoro-82M-4bit` | Natural voice, small, fast, Apache-licensed weights |
+| TTS | `mlx-community/kitten-tts-nano-0.8-fp16` | 14.6M parameters and faster-than-playback synthesis |
 | Browser | Playwright Chromium | Persistent profile and deterministic controls |
 
-On a **32–48 GB Mac**, the full profile automatically switches the brain to the same family as the demo—`Qwen3.6-35B-A3B` UD-Q4_K_M (about 22.1 GB)—with a 32K context, and uses Whisper Large-v3 Turbo FP16. Kokoro remains the voice because its small footprint and low first-audio latency matter more to conversational flow than a much larger speech model. On an **8–16 GB Mac**, the compact profile in the table is selected.
+On a **32–48 GB Mac**, the main branch's full profile automatically switches the brain to the same family as the demo—`Qwen3.6-35B-A3B` UD-Q4_K_M (about 22.1 GB)—with a 32K context and Whisper Large-v3 Turbo FP16. This branch is tuned for **8 GB** and explicitly selects the compact profile in the table.
 
 All adapters are configured in `.env`; hosted OpenAI-compatible LLM/STT/TTS endpoints also work.
 
@@ -75,7 +75,7 @@ Install browser binaries separately after a dependency update with `npm run brow
 
 - Keep `--ctx-size 4096`, `--parallel 1`, and the Q4 model in `scripts/start-models.sh`.
 - Close Chrome, Docker Desktop, and other memory-heavy apps before starting all models.
-- Switch STT to `mlx-community/whisper-base-mlx-4bit` if Small causes pressure.
+- For multilingual speech, set `STT_MODEL=mlx-community/whisper-small-asr-6bit` and clear `STT_LANGUAGE` (higher latency).
 - Use typed input while testing the LLM independently; the UI remains fully usable with the mic muted.
 - If you already run LM Studio or Ollama, point `LLM_BASE_URL` and `LLM_MODEL` at its OpenAI-compatible endpoint and start only MLX-Audio.
 
@@ -86,13 +86,15 @@ MODEL_PROFILE=full
 # MODEL_PROFILE=compact
 ```
 
+For a dedicated 8 GB launch, use `npm run launch:compact`. See [COMPACT.md](COMPACT.md) for its exact model and memory profile.
+
 The repository’s automated checks do not download weights or exercise microphone hardware. See [ARCHITECTURE.md](ARCHITECTURE.md) for the pipeline and [SECURITY.md](SECURITY.md) before signing the browser into accounts.
 
 After setup, `npm run doctor` checks the machine and service health. `npm test`, `npm run check`, `npm run lint`, and `npm run build` verify the tool/browser layer and both TypeScript applications.
 
 ## Configuration
 
-Copy `.env.example` to `.env`. The important options are `LLM_BASE_URL`, `LLM_MODEL`, `STT_URL`, `STT_MODEL`, `TTS_URL`, `TTS_MODEL`, `TTS_VOICE`, `AGENT_WORKSPACE`, and `BROWSER_ALLOWLIST`.
+Copy `.env.example` to `.env`. The important options are `LLM_BASE_URL`, `LLM_MODEL`, `STT_URL`, `STT_MODEL`, `STT_LANGUAGE`, `TTS_URL`, `TTS_MODEL`, `TTS_VOICE`, `AGENT_WORKSPACE`, and `BROWSER_ALLOWLIST`.
 
 ## Attribution
 
