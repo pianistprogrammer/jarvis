@@ -31,12 +31,12 @@ fi
 case "$profile" in
   compact)
     model_ref="Qwen/Qwen3-4B-GGUF:Q4_K_M"
-    context=4096
+    context=32768
     disk_need_gb=7
     ;;
   full)
     model_ref="unsloth/Qwen3.6-35B-A3B-GGUF:UD-Q4_K_M"
-    context=32768
+    context=65536
     disk_need_gb=32
     ;;
   *) echo "MODEL_PROFILE must be auto, compact, or full." >&2; exit 1 ;;

@@ -21,7 +21,10 @@ export const toolDefinitions = [
   tool('browser_open', 'Open a URL in the persistent agent browser and return its accessible snapshot.', { url: { type: 'string' } }, ['url']),
   tool('browser_snapshot', 'Read the current page, including stable references for interactive elements.', {}),
   tool('browser_click', 'Click an element reference from the latest browser snapshot.', { ref: { type: 'string', description: 'Reference such as e3.' } }, ['ref']),
-  tool('browser_type', 'Fill an input reference and optionally submit it.', { ref: { type: 'string' }, text: { type: 'string' }, submit: { type: 'boolean' } }, ['ref', 'text']),
+  tool('browser_type', 'Fill a visible input. Set submit:true to submit a search with Enter. Returns fresh references.', { ref: { type: 'string' }, text: { type: 'string' }, submit: { type: 'boolean' } }, ['ref', 'text']),
+  tool('browser_key', 'Press a key in the active page, such as Enter, Escape, Tab, or ArrowDown.', { key: { type: 'string' } }, ['key']),
+  tool('browser_scroll', 'Scroll the active page and return fresh references. Positive pixels scroll down.', { pixels: { type: 'number' } }, ['pixels']),
+  tool('browser_switch_tab', 'Switch to a tab index listed in the latest snapshot.', { index: { type: 'integer', minimum: 0 } }, ['index']),
 ]
 
 function safePath(input = '.') {
@@ -50,6 +53,9 @@ export async function executeTool(name: string, args: Record<string, unknown>) {
     case 'browser_snapshot': return agentBrowser.snapshot()
     case 'browser_click': return agentBrowser.click(String(args.ref))
     case 'browser_type': return agentBrowser.type(String(args.ref), String(args.text), Boolean(args.submit))
+    case 'browser_key': return agentBrowser.input('key', { key: String(args.key) })
+    case 'browser_scroll': return agentBrowser.input('wheel', { deltaY: Number(args.pixels) })
+    case 'browser_switch_tab': return agentBrowser.switchTab(Number(args.index))
     default: throw new Error(`Unknown tool: ${name}`)
   }
 }

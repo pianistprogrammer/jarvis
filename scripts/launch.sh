@@ -2,14 +2,18 @@
 set -euo pipefail
 
 model_pid=""
+browser_pid=""
 cleanup() {
   [[ -n "$model_pid" ]] && kill "$model_pid" 2>/dev/null || true
+  [[ -n "$browser_pid" ]] && kill "$browser_pid" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
 if [[ ! -d dist ]]; then npm run build; fi
 scripts/start-models.sh &
 model_pid="$!"
+scripts/start-browser.sh > logs/browser.log 2>&1 &
+browser_pid="$!"
 
 echo "Waiting for local inference services…"
 for _ in $(seq 1 1800); do

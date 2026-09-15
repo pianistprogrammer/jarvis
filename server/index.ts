@@ -6,6 +6,8 @@ import { WebSocketServer, WebSocket } from 'ws'
 import { config } from './config.js'
 import { agentBrowser } from './browser.js'
 import { AgentSession } from './agent.js'
+import { frameAudioChunk } from './audio-stream.js'
+import { attachBrowserUpgrade, mountBrowserProxy } from './browser-proxy.js'
 
 await mkdir(config.workspace, { recursive: true })
 const app = express()
@@ -18,6 +20,18 @@ app.get('/api/browser/status', (_req, res) => res.json(agentBrowser.status()))
 app.get('/api/browser/screenshot', async (_req, res) => {
   try { res.set({ 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' }).send(await agentBrowser.screenshot()) }
   catch { res.sendStatus(404) }
+})
+app.post('/api/browser/input', async (req, res) => {
+  try { res.json(await agentBrowser.input(req.body?.action, req.body || {})) }
+  catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : String(error) }) }
+})
+app.post('/api/browser/tabs/new', async (req, res) => {
+  try { res.json(await agentBrowser.newTab(String(req.body?.url || 'about:blank'))) }
+  catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : String(error) }) }
+})
+app.post('/api/browser/tabs/close', async (_req, res) => {
+  try { res.json(await agentBrowser.closeTab()) }
+  catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : String(error) }) }
 })
 app.post('/api/transcribe', express.raw({ type: ['audio/wav', 'audio/webm', 'application/octet-stream'], limit: '16mb' }), async (req, res) => {
   if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'Audio is required' })
@@ -40,23 +54,42 @@ app.post('/api/tts', async (req, res) => {
   try {
     const upstream = await fetch(config.ttsUrl, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120_000)]),
-      body: JSON.stringify({ model: config.ttsModel, input: text, voice: config.ttsVoice, response_format: 'wav', speed: 1.0 }),
+      body: JSON.stringify({ model: config.ttsModel, input: text, voice: config.ttsVoice, response_format: 'wav', speed: 1.0, stream: true, streaming_interval: 0.5 }),
     })
     if (!upstream.ok || !upstream.body) throw new Error(`TTS returned HTTP ${upstream.status}: ${(await upstream.text()).slice(0, 240)}`)
-    res.set({ 'Content-Type': upstream.headers.get('content-type') || 'audio/wav', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' })
-    for await (const chunk of upstream.body as any) res.write(chunk)
+    res.set({ 'Content-Type': 'application/x-jarvis-audio-stream', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' })
+    let pending = Buffer.alloc(0)
+    for await (const chunk of upstream.body as any) {
+      pending = Buffer.concat([pending, Buffer.from(chunk)])
+      while (pending.length >= 44 && pending.toString('ascii', 0, 4) === 'RIFF') {
+        const size = pending.readUInt32LE(4) + 8
+        if (pending.length < size) break
+        res.write(frameAudioChunk(pending.subarray(0, size))); pending = pending.subarray(size)
+      }
+    }
+    if (pending.length) res.write(frameAudioChunk(pending))
     res.end()
   } catch (error) { if (!res.headersSent) res.status(502).json({ error: error instanceof Error ? error.message : String(error) }); else res.end() }
 })
 
 const dist = path.resolve('dist')
+mountBrowserProxy(app)
 app.use(express.static(dist))
 app.get('/{*splat}', (_req, res) => res.sendFile(path.join(dist, 'index.html')))
 
 const server = createServer(app)
-const wss = new WebSocketServer({ server, path: '/ws' })
+attachBrowserUpgrade(server)
+const wss = new WebSocketServer({ noServer: true })
 wss.on('connection', (socket) => {
-  const send = (event: Record<string, unknown>) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(event)) }
+  const send = (event: Record<string, unknown>) => {
+    if (socket.readyState !== WebSocket.OPEN) return
+    socket.send(JSON.stringify(event))
+    const diagnosticTypes = new Set(['ready', 'status', 'user', 'tool_start', 'tool_end', 'assistant_done', 'error', 'reset'])
+    if (diagnosticTypes.has(String(event.type))) {
+      const detail = event.type === 'status' ? `: ${String(event.value)}` : event.type === 'user' ? ` (${String(event.text).slice(0, 120)})` : event.type === 'tool_start' ? `: ${String(event.name)}` : event.type === 'tool_end' ? `: ${String(event.name)} ${event.ok ? 'succeeded' : 'failed'}` : event.type === 'assistant_done' ? ` (${String(event.text).length} chars)` : ''
+      socket.send(JSON.stringify({ type: 'debug', message: `${String(event.type)}${detail}` }))
+    }
+  }
   const session = new AgentSession(send)
   send({ type: 'ready' })
   socket.on('message', (raw) => {
@@ -68,6 +101,80 @@ wss.on('connection', (socket) => {
     } catch { send({ type: 'error', message: 'Invalid client message' }) }
   })
   socket.on('close', () => session.cancel())
+})
+function pcmWav(audio: Buffer) {
+  const wav = Buffer.alloc(44 + audio.length)
+  wav.write('RIFF', 0); wav.writeUInt32LE(36 + audio.length, 4); wav.write('WAVE', 8); wav.write('fmt ', 12)
+  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(16000, 24)
+  wav.writeUInt32LE(32000, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(audio.length, 40); audio.copy(wav, 44)
+  return wav
+}
+
+const sttWss = new WebSocketServer({ noServer: true })
+sttWss.on('connection', (client) => {
+  let upstream: WebSocket
+  let pending: Buffer[] = []
+  let utterance: Buffer[] = []
+  let inTurn = false
+
+  const connectUpstream = () => {
+    upstream = new WebSocket('ws://127.0.0.1:8000/v1/audio/transcriptions/realtime')
+    upstream.on('open', () => {
+      upstream.send(JSON.stringify({ model: config.sttModel, sample_rate: 16000, streaming: false }))
+      for (const audio of pending) upstream.send(audio)
+      pending = []
+    })
+    upstream.on('message', (raw) => { if (client.readyState === WebSocket.OPEN) client.send(raw) })
+    upstream.on('error', (error) => {
+      if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify({ type: 'error', error: { message: error.message } }))
+    })
+  }
+
+  const finalize = async () => {
+    const audio = Buffer.concat(utterance); utterance = []
+    if (!audio.length) return
+    const form = new FormData()
+    form.set('file', new Blob([new Uint8Array(pcmWav(audio))], { type: 'audio/wav' }), 'recording.wav')
+    form.set('model', config.sttModel); form.set('response_format', 'json')
+    const response = await fetch(config.sttUrl, { method: 'POST', body: form })
+    if (!response.ok) throw new Error(`STT final returned HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`)
+    const data = await response.json() as { text?: string }
+    if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify({ text: data.text?.trim() || '', is_partial: false }))
+  }
+
+  connectUpstream()
+  client.on('message', (raw) => {
+    try {
+      const message = JSON.parse(raw.toString())
+      if (message.type === 'input_audio_buffer.speech_started') { inTurn = true; utterance = []; return }
+      if (message.type === 'input_audio_buffer.commit') {
+        inTurn = false; pending = []; if (upstream.readyState === WebSocket.OPEN) upstream.close()
+        void finalize().then(connectUpstream).catch((error) => {
+          if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify({ type: 'error', error: { message: String(error) } }))
+        })
+        return
+      }
+      if (message.type !== 'input_audio_buffer.append' || typeof message.audio !== 'string') return
+      const audio = Buffer.from(message.audio, 'base64')
+      if (inTurn) utterance.push(audio)
+      if (upstream.readyState === WebSocket.OPEN) upstream.send(audio)
+      else pending.push(audio)
+    } catch (error) {
+      if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify({ type: 'error', error: { message: String(error) } }))
+    }
+  })
+  client.on('close', () => { if (upstream.readyState === WebSocket.OPEN || upstream.readyState === WebSocket.CONNECTING) upstream.close() })
+})
+
+server.on('upgrade', (request, socket, head) => {
+  const pathname = new URL(request.url || '/', 'http://127.0.0.1').pathname
+  if (pathname === '/ws') {
+    wss.handleUpgrade(request, socket, head, (client) => wss.emit('connection', client, request))
+  } else if (pathname === '/stt') {
+    sttWss.handleUpgrade(request, socket, head, (client) => sttWss.emit('connection', client, request))
+  } else if (pathname.startsWith('/browser-ui')) {
+    return
+  }
 })
 
 server.listen(config.port, '127.0.0.1', () => console.log(`Jarvis server listening on http://127.0.0.1:${config.port}`))
