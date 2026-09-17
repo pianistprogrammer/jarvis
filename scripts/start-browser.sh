@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-[[ -f .env ]] && set -a && source .env && set +a
+source scripts/load-env.sh
 name="${BROWSER_CONTAINER:-jarvis-browser}"
 profile="${BROWSER_PROFILE_DIR:-$PWD/data/browser-vnc}"
 if docker inspect "$name" >/dev/null 2>&1; then

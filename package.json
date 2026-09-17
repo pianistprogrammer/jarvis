@@ -16,12 +16,14 @@
     "setup:mac": "bash scripts/setup-macos.sh",
     "models:start": "bash scripts/start-models.sh",
     "launch": "bash scripts/launch.sh",
+    "lcunch": "bash scripts/launch.sh",
     "doctor": "bash scripts/doctor.sh",
     "browser:install": "playwright install chromium",
     "lint": "oxlint",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ricky0123/vad-web": "^0.0.31",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "mathjs": "^15.2.0",

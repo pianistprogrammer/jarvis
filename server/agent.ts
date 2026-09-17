@@ -1,6 +1,7 @@
 import { config } from './config.js'
 import { executeTool, toolDefinitions } from './tools.js'
 import { compactHistory, historyBytes, type Message } from './memory.js'
+import { toolProgressCue } from './tool-cues.js'
 
 type Send = (event: Record<string, unknown>) => void
 type ToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } }
@@ -24,9 +25,9 @@ export class AgentSession {
   private async compact(signal: AbortSignal) {
     if (historyBytes(this.history) < 20000) return
     const base = config.llmBaseUrl.replace(/\/v1$/, '')
-    const { prompt } = await this.jsonRequest('/apply-template', { messages: this.history, tools: toolDefinitions, chat_template_kwargs: { enable_thinking: true } }, signal, base)
+    const { prompt } = await this.jsonRequest('/apply-template', { messages: this.history, tools: toolDefinitions, chat_template_kwargs: { enable_thinking: false } }, signal, base)
     const { tokens } = await this.jsonRequest('/tokenize', { content: prompt }, signal, base)
-    const threshold = config.profile === 'full' ? 48000 : 24000
+    const threshold = 16000
     if (tokens.length < threshold) return
     this.send({ type: 'status', value: 'compacting' })
     this.send({ type: 'notice', text: 'I’m briefly summarizing our earlier work so I can keep going without losing the important details.' })
@@ -82,7 +83,10 @@ export class AgentSession {
           signal.throwIfAborted()
           let args: Record<string, unknown> = {}
           this.send({ type: 'tool_start', id: call.id, name: call.function.name })
-          if (call.function.name.startsWith('browser_')) this.send({ type: 'browser_active' })
+          if (call.function.name.startsWith('browser_')) {
+            this.send({ type: 'browser_active' })
+            this.send({ type: 'notice', text: toolProgressCue(call.function.name) })
+          }
           try {
             if (stopReason) throw new Error(stopReason)
             args = JSON.parse(call.function.arguments || '{}')
@@ -110,11 +114,20 @@ export class AgentSession {
     }
   }
 
+  private completionMessages(finalReason = '') {
+    if (!finalReason) return this.history
+    const first = this.history[0]
+    if (first?.role === 'system') {
+      return [{ ...first, content: `${first.content}\n\nResponse constraint: ${finalReason}` }, ...this.history.slice(1)]
+    }
+    return [{ role: 'system', content: finalReason }, ...this.history]
+  }
+
   private async completion(signal: AbortSignal, firstResponse: boolean, finalReason = '') {
     const response = await fetch(`${config.llmBaseUrl}/chat/completions`, {
       method: 'POST', signal,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.llmApiKey}` },
-      body: JSON.stringify({ model: config.llmModel, messages: finalReason ? [...this.history, { role: 'system', content: finalReason }] : this.history, tools: toolDefinitions, tool_choice: finalReason ? 'none' : 'auto', stream: true, stream_options: { include_usage: true }, temperature: 0.6, max_tokens: 2400, chat_template_kwargs: { enable_thinking: !firstResponse } }),
+      body: JSON.stringify({ model: config.llmModel, messages: this.completionMessages(finalReason), tools: toolDefinitions, tool_choice: finalReason ? 'none' : 'auto', stream: true, stream_options: { include_usage: true }, temperature: 0.6, max_tokens: 2400, chat_template_kwargs: { enable_thinking: false } }),
     })
     if (!response.ok || !response.body) throw new Error(`LLM returned HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`)
     const reader = response.body.getReader()
@@ -139,7 +152,22 @@ export class AgentSession {
       }
       if (done) break
     }
-    if (promptTokens) this.send({ type: 'context', used: promptTokens, limit: config.profile === 'full' ? 65536 : 32768 })
+    if (!text && !calls.size) {
+      const retry = await this.jsonRequest('/chat/completions', {
+        model: config.llmModel,
+        messages: this.completionMessages(finalReason),
+        tools: toolDefinitions,
+        tool_choice: finalReason ? 'none' : 'auto',
+        stream: false,
+        temperature: 0.6,
+        max_tokens: 2400,
+        chat_template_kwargs: { enable_thinking: false },
+      }, signal)
+      text = String(retry.choices?.[0]?.message?.content || '')
+      if (text) this.send({ type: 'assistant_delta', text })
+      for (const call of retry.choices?.[0]?.message?.tool_calls || []) calls.set(calls.size, call)
+    }
+    if (promptTokens) this.send({ type: 'context', used: promptTokens, limit: config.llmContextSize })
     return { text, toolCalls: [...calls.values()] }
   }
 }

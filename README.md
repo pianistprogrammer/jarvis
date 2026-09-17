@@ -7,9 +7,9 @@ Jarvis is a near-real-time, voice-first agent that runs on an Apple silicon Mac.
 ## What is included
 
 - Hands-free microphone capture with local turn detection, echo-cancellation request, and barge-in
-- MLX Whisper speech-to-text through an OpenAI-compatible API
-- Qwen3 4B Q4_K_M through llama.cpp and Metal
-- Kokoro 82M 4-bit speech through MLX-Audio, with sentence-level generation/playback overlap
+- MLX Parakeet speech-to-text through an OpenAI-compatible API
+- Qwen3.8 9B Distill through llama.cpp and Metal
+- Qwen3-TTS 1.7B 6-bit speech through MLX-Audio, with sentence-level generation/playback overlap
 - Streaming OpenAI-compatible tool calls
 - Persistent Playwright Chromium with snapshots, click/type tools, optional domain allowlist, and live screenshots
 - Workspace-scoped file tools, calculator, time, and a guarded local shell
@@ -17,25 +17,25 @@ Jarvis is a near-real-time, voice-first agent that runs on an Apple silicon Mac.
 
 ## Why these models
 
-The [Pithagoras voice demo](https://www.youtube.com/watch?v=xbedfuqYQYA) used Silero V5, Whisper.cpp, Qwen 35B-A3B through llama.cpp, and Breeze-TTS-2/audio.cpp on an RTX 3060 with 12 GB VRAM. That exact combination is CUDA-focused and is too large for an 8 GB unified-memory Mac.
+The [Pithagoras voice demo](https://www.youtube.com/watch?v=xbedfuqYQYA) used a CUDA-focused speech stack, Qwen 35B-A3B through llama.cpp, and Breeze-TTS-2/audio.cpp on an RTX 3060 with 12 GB VRAM. That exact combination is too large for an 8 GB unified-memory Mac.
 
 Jarvis uses the same modular cascade with Apple-native substitutions. It detects unified memory at launch and has compact and full profiles:
 
 | Stage | Default | Why on 8 GB Apple silicon |
 | --- | --- | --- |
-| Turn detection | Local energy/hysteresis VAD | Zero model memory and immediate barge-in |
-| STT | `mlx-community/whisper-small-mlx-q4` | Multilingual, roughly 197 MB |
-| LLM | `Qwen/Qwen3-4B-GGUF:Q4_K_M` | Strong tool calling at roughly 2.5 GB |
-| TTS | `mlx-community/Kokoro-82M-4bit` | Natural voice, small, fast, Apache-licensed weights |
+| Turn detection | Browser Silero VAD | Speech-aware detection and immediate barge-in |
+| STT | `mlx-community/parakeet-tdt-0.6b-v3` | Fast local speech recognition |
+| LLM | `empero-ai/Qwen3.8-9B-Distill-GGUF:Q4_K_M` | Strong local reasoning with a moderate memory footprint |
+| TTS | `mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-6bit` | Natural voice with controllable style; Kokoro remains available |
 | Browser | Playwright Chromium | Persistent profile and deterministic controls |
 
-On a **32–48 GB Mac**, the full profile automatically switches the brain to the same family as the demo—`Qwen3.6-35B-A3B` UD-Q4_K_M (about 22.1 GB)—with a 32K context, and uses Whisper Large-v3 Turbo FP16. Kokoro remains the voice because its small footprint and low first-audio latency matter more to conversational flow than a much larger speech model. On an **8–16 GB Mac**, the compact profile in the table is selected.
+The 9B Q4_K_M model is used on both compact and full profiles, with a 64K context. Parakeet remains the local speech recognizer.
 
 All adapters are configured in `.env`; hosted OpenAI-compatible LLM/STT/TTS endpoints also work.
 
 ## Quick start
 
-Requirements: Apple silicon, macOS, Homebrew, Node.js 20+, and at least 7 GB free disk for the compact profile or 32 GB for the full profile.
+Requirements: Apple silicon, macOS, Homebrew, Node.js 20+, and at least 12 GB free disk for the model and caches.
 
 ```bash
 git clone https://github.com/pianistprogrammer/jarvis.git
@@ -57,7 +57,9 @@ npm run models:start
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173), allow microphone access, and speak. The first model use downloads weights and will be slower. On the 48 GB full profile, allow roughly 25 GB of downloads. The launcher waits for both services to report healthy and points to logs if either exits. Production mode is `npm run build && npm start`, then open port 4100.
+Open the URL printed by the launcher, allow microphone access, and speak. The first model use downloads weights and will be slower. The launcher smoke-tests the LLM before starting the app and selects the next free app port if `PORT` (default `4100`) is occupied. Production mode is `npm run build && npm start`, then open port 4100.
+
+The launcher appends output from Jarvis, llama.cpp, MLX-Audio, and browser startup to `logs/app.log`. Component-specific logs remain in `logs/llama-server.log`, `logs/mlx-audio.log`, and `logs/browser.log`.
 
 ## Browser use
 
@@ -71,11 +73,11 @@ BROWSER_ALLOWLIST=github.com,*.wikipedia.org,news.ycombinator.com
 
 Install browser binaries separately after a dependency update with `npm run browser:install`.
 
-## Tuning an 8 GB machine
+## Tuning a compact machine
 
-- Keep `--ctx-size 4096`, `--parallel 1`, and the Q4 model in `scripts/start-models.sh`.
+- Keep `LLM_CONTEXT_SIZE=65536`, `--parallel 1`, and the Q4 model in `scripts/start-models.sh`. A 64K KV cache is memory-intensive; lower `LLM_CONTEXT_SIZE` if macOS starts swapping.
 - Close Chrome, Docker Desktop, and other memory-heavy apps before starting all models.
-- Switch STT to `mlx-community/whisper-base-mlx-4bit` if Small causes pressure.
+- Keep `STT_MODEL=mlx-community/parakeet-tdt-0.6b-v3` for the local STT path.
 - Use typed input while testing the LLM independently; the UI remains fully usable with the mic muted.
 - If you already run LM Studio or Ollama, point `LLM_BASE_URL` and `LLM_MODEL` at its OpenAI-compatible endpoint and start only MLX-Audio.
 
@@ -92,7 +94,7 @@ After setup, `npm run doctor` checks the machine and service health. `npm test`,
 
 ## Configuration
 
-Copy `.env.example` to `.env`. The important options are `LLM_BASE_URL`, `LLM_MODEL`, `STT_URL`, `STT_MODEL`, `TTS_URL`, `TTS_MODEL`, `TTS_VOICE`, `AGENT_WORKSPACE`, and `BROWSER_ALLOWLIST`.
+Copy `.env.example` to `.env`. The important options are `LLM_BASE_URL`, `LLM_PORT`, `LLM_MODEL`, `LLM_CONTEXT_SIZE`, `AUDIO_PORT`, `STT_URL`, `STT_MODEL`, `TTS_PROVIDER`, `TTS_URL`, `TTS_MODEL`, `TTS_VOICE`, `TTS_LANG_CODE`, `TTS_INSTRUCT`, `TTS_TEMPERATURE`, `TTS_TOP_P`, `TTS_TOP_K`, `TTS_REPETITION_PENALTY`, `TTS_SPEED`, `TTS_STREAMING_INTERVAL`, `AGENT_WORKSPACE`, and `BROWSER_ALLOWLIST`. `TTS_PROVIDER` defaults to `qwen3-tts`; set it to `kokoro` to restore Kokoro. Qwen3-TTS defaults to Ryan with a calm agent instruction, temperature `0.35`, top-p `0.9`, top-k `20`, repetition penalty `1.05`, speed `1.05`, and a `0.32` second streaming interval; tune these values in `.env`. `LLM_CONTEXT_SIZE` and the TTS sampling settings are passed through to the local runtimes. `LLM_PORT` defaults to `8180`; `AUDIO_PORT` defaults to `8100`. Models use `JARVIS_MODEL_CACHE` when set, or fall back to `data/model-cache` if the inherited Hugging Face cache is unavailable.
 
 ## Attribution
 

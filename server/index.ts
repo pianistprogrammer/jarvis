@@ -15,7 +15,7 @@ app.disable('x-powered-by')
 app.use(express.json({ limit: '2mb' }))
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, profile: config.profile, model: config.llmModel, workspace: config.workspace }))
-app.get('/api/config', (_req, res) => res.json({ profile: config.profile, llmModel: config.llmModel, sttModel: config.sttModel, ttsModel: config.ttsModel, ttsVoice: config.ttsVoice }))
+app.get('/api/config', (_req, res) => res.json({ profile: config.profile, llmModel: config.llmModel, sttModel: config.sttModel, ttsProvider: config.ttsProvider, ttsModel: config.ttsModel, ttsVoice: config.ttsVoice }))
 app.get('/api/browser/status', (_req, res) => res.json(agentBrowser.status()))
 app.get('/api/browser/screenshot', async (_req, res) => {
   try { res.set({ 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' }).send(await agentBrowser.screenshot()) }
@@ -54,7 +54,7 @@ app.post('/api/tts', async (req, res) => {
   try {
     const upstream = await fetch(config.ttsUrl, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120_000)]),
-      body: JSON.stringify({ model: config.ttsModel, input: text, voice: config.ttsVoice, response_format: 'wav', speed: 1.0, stream: true, streaming_interval: 0.5 }),
+      body: JSON.stringify({ model: config.ttsModel, input: text, voice: config.ttsVoice, instruct: config.ttsInstruct, lang_code: config.ttsLangCode, temperature: config.ttsTemperature, top_p: config.ttsTopP, top_k: config.ttsTopK, repetition_penalty: config.ttsRepetitionPenalty, response_format: 'wav', speed: config.ttsSpeed, stream: true, streaming_interval: config.ttsStreamingInterval }),
     })
     if (!upstream.ok || !upstream.body) throw new Error(`TTS returned HTTP ${upstream.status}: ${(await upstream.text()).slice(0, 240)}`)
     res.set({ 'Content-Type': 'application/x-jarvis-audio-stream', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' })
@@ -118,7 +118,11 @@ sttWss.on('connection', (client) => {
   let inTurn = false
 
   const connectUpstream = () => {
-    upstream = new WebSocket('ws://127.0.0.1:8000/v1/audio/transcriptions/realtime')
+    const realtimeUrl = new URL(config.sttUrl)
+    realtimeUrl.protocol = realtimeUrl.protocol === 'https:' ? 'wss:' : 'ws:'
+    realtimeUrl.pathname = '/v1/audio/transcriptions/realtime'
+    realtimeUrl.search = ''
+    upstream = new WebSocket(realtimeUrl)
     upstream.on('open', () => {
       upstream.send(JSON.stringify({ model: config.sttModel, sample_rate: 16000, streaming: false }))
       for (const audio of pending) upstream.send(audio)

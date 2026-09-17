@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { MicVAD } from '@ricky0123/vad-web'
 import './App.css'
-import { toSpokenText } from './spoken'
+import { toSpokenText, takeSpeechChunks } from './spoken'
 
 type Status = 'connecting' | 'listening' | 'hearing' | 'transcribing' | 'thinking' | 'working' | 'compacting' | 'speaking' | 'muted' | 'error'
 type Message = { role: 'user' | 'assistant'; text: string }
-type Models = { profile: string; llmModel: string; sttModel: string; ttsModel: string; ttsVoice: string }
+type Models = { profile: string; llmModel: string; sttModel: string; ttsProvider: string; ttsModel: string; ttsVoice: string }
 
 const Icon = ({ name }: { name: 'mic' | 'stop' | 'send' | 'browser' | 'settings' | 'reset' }) => {
   const paths = {
@@ -61,6 +62,7 @@ function App() {
   const latencyStartRef = useRef<number | null>(null)
   const agentStatus = useRef<Status>('listening')
   const speechDecodeChain = useRef<Promise<void>>(Promise.resolve())
+  const vadActive = useRef(false)
   const addLog = useCallback((message: string) => {
     setLogs((old) => [...old.slice(-99), { time: new Date().toLocaleTimeString(), message }])
   }, [])
@@ -80,6 +82,7 @@ function App() {
       const audio = await speakingQueue.current.shift()
       if (!audio || generation !== speechGeneration.current) continue
       const ctx = audioContext.current || new AudioContext(); audioContext.current = ctx
+      if (ctx.state === 'suspended') await ctx.resume()
       const source = ctx.createBufferSource(); source.buffer = audio; source.connect(ctx.destination); sources.current.push(source)
       if (latencyStartRef.current !== null) { setLatencyMs(performance.now() - latencyStartRef.current); setLatencyStart(null); latencyStartRef.current = null; addLog('first TTS audio playback started') }
       setStatus('speaking'); setLevel(.7)
@@ -112,6 +115,7 @@ function App() {
             if (pending.length < size + 4) break
             const chunk = pending.slice(4, size + 4); pending = pending.slice(size + 4)
             const ctx = audioContext.current || new AudioContext(); audioContext.current = ctx
+            if (ctx.state === 'suspended') await ctx.resume()
             const audio = await ctx.decodeAudioData(chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength))
             if (generation !== speechGeneration.current) return
             speakingQueue.current.push(Promise.resolve(audio)); void pumpSpeech(generation)
@@ -123,16 +127,9 @@ function App() {
   }, [pumpSpeech])
 
   const flushPhrases = useCallback((final = false) => {
-    let value = phraseRef.current
-    const boundary = /^(.*?[.!?](?:["')\]]+)?)(?:\s+|$)/s
-    while (true) {
-      const match = value.match(boundary)
-      if (!match || (match[1].length < 18 && !final)) break
-      queueSpeech(match[1]); value = value.slice(match[0].length)
-    }
-    if (!final && value.length > 220) { const cut = value.lastIndexOf(' ', 200); queueSpeech(value.slice(0, cut > 80 ? cut : 200)); value = value.slice(cut > 80 ? cut : 200) }
-    if (final && value.trim()) queueSpeech(value)
-    phraseRef.current = value
+    const { chunks, remaining } = takeSpeechChunks(phraseRef.current, final)
+    chunks.forEach(queueSpeech)
+    phraseRef.current = remaining
   }, [queueSpeech])
 
   useEffect(() => {
@@ -193,8 +190,8 @@ function App() {
 
   useEffect(() => {
     if (muted) return
-    let stopped = false, stream: MediaStream, ctx: AudioContext, processor: ScriptProcessorNode
-    let preRoll: Float32Array[] = [], speechMs = 0, silenceMs = 0, active = false
+    let stopped = false, vad: MicVAD | undefined
+    const preRoll: Float32Array[] = []
     const sendAudio = (samples: Float32Array, rate: number) => {
       const message = JSON.stringify({ type: 'input_audio_buffer.append', audio: pcm16Base64(samples, rate) })
       const stt = sttSocketRef.current
@@ -205,30 +202,27 @@ function App() {
       const stt = sttSocketRef.current
       if (stt?.readyState === WebSocket.OPEN) stt.send(message); else sttPendingRef.current.push(message)
     }
-    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false }).then((media) => {
-      if (stopped) { media.getTracks().forEach((x) => x.stop()); return }
-      stream = media; ctx = new AudioContext(); const source = ctx.createMediaStreamSource(media); processor = ctx.createScriptProcessor(2048, 1, 1)
-      processor.onaudioprocess = (event) => {
-        const samples = new Float32Array(event.inputBuffer.getChannelData(0)); const rms = Math.sqrt(samples.reduce((n, x) => n + x * x, 0) / samples.length)
-        setLevel(Math.min(1, rms * 14)); const frameMs = samples.length / ctx.sampleRate * 1000
-        if (!active) {
-          preRoll.push(samples); if (preRoll.length > 8) preRoll.shift()
-          speechMs = rms > .035 ? speechMs + frameMs : 0
-          if (speechMs >= 220) {
-            active = true; silenceMs = 0; setStatus('hearing'); cancelSpeech(); socketRef.current?.send(JSON.stringify({ type: 'cancel' })); sendControl('speech_started')
-            preRoll.forEach((chunk) => sendAudio(chunk, ctx.sampleRate)); preRoll = []
-          }
-        } else {
-          sendAudio(samples, ctx.sampleRate); silenceMs = rms < .022 ? silenceMs + frameMs : 0
-          if (silenceMs >= 1000) {
-            active = false; preRoll = []; speechMs = 0; setStatus('transcribing')
-            const started = performance.now(); latencyStartRef.current = started; setLatencyStart(started); setLatencyMs(0); addLog('VAD detected end of speech'); sendControl('commit')
-          }
-        }
-      }
-      source.connect(processor); processor.connect(ctx.destination); setStatus('listening')
-    }).catch((e) => { setError(`Microphone: ${e.message}`); setMuted(true) })
-    return () => { stopped = true; processor?.disconnect(); void ctx?.close(); stream?.getTracks().forEach((x) => x.stop()) }
+    MicVAD.new({
+      model: 'v5', baseAssetPath: '/', onnxWASMBasePath: '/', startOnLoad: true, processorType: 'AudioWorklet',
+      getStream: () => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false }),
+      pauseStream: async (stream) => { stream.getTracks().forEach((track) => track.stop()) },
+      resumeStream: () => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false }),
+      onFrameProcessed: ({ isSpeech }, frame) => {
+        setLevel(isSpeech)
+        if (vadActive.current) sendAudio(frame, 16_000)
+        else { preRoll.push(frame.slice()); if (preRoll.length > 12) preRoll.shift() }
+      },
+      onSpeechStart: () => {
+        vadActive.current = true; setStatus('hearing'); cancelSpeech(); socketRef.current?.send(JSON.stringify({ type: 'cancel' })); sendControl('speech_started')
+        preRoll.forEach((chunk) => sendAudio(chunk, 16_000)); preRoll.length = 0
+      },
+      onSpeechEnd: () => {
+        vadActive.current = false; preRoll.length = 0; setStatus('transcribing')
+        const started = performance.now(); latencyStartRef.current = started; setLatencyStart(started); setLatencyMs(0); addLog('Silero VAD detected end of speech'); sendControl('commit')
+      },
+      onVADMisfire: () => { vadActive.current = false; preRoll.length = 0; setStatus('listening') },
+    }).then((instance) => { if (stopped) void instance.destroy(); else { vad = instance; setStatus('listening') } }).catch((e) => { setError(`Microphone: ${e.message}`); setMuted(true) })
+    return () => { stopped = true; vadActive.current = false; if (vad) void vad.destroy() }
   }, [muted, cancelSpeech, addLog])
 
 
@@ -271,8 +265,8 @@ function App() {
       <button className="modal-close" onClick={() => setSettingsOpen(false)}>×</button><span className="eyebrow">RUNTIME</span><h2>Apple silicon stack</h2><p>These adapters use local OpenAI-compatible endpoints. Change them in <code>.env</code>.</p>
       <div className="model-row"><span>Brain</span><div><b>{models?.llmModel || 'Loading…'}</b><small>llama.cpp · Metal</small></div></div>
       <div className="model-row"><span>Ears</span><div><b>{models?.sttModel || 'Loading…'}</b><small>Realtime STT · MLX</small></div></div>
-      <div className="model-row"><span>Voice</span><div><b>{models?.ttsModel || 'Loading…'}</b><small>{models?.ttsVoice} · MLX</small></div></div>
-      <div className="privacy-note">{models?.profile === 'full' ? 'Full 32–48 GB profile detected.' : 'Compact 8–16 GB profile detected.'} Audio and prompts stay on this Mac when local endpoints are used.</div>
+      <div className="model-row"><span>Voice</span><div><b>{models?.ttsModel || 'Loading…'}</b><small>{models?.ttsProvider || 'Loading…'} · {models?.ttsVoice} · MLX</small></div></div>
+      <div className="privacy-note">{models?.profile === 'full' ? 'Full profile detected · 64K LLM context.' : 'Compact profile detected.'} Audio and prompts stay on this Mac when local endpoints are used.</div>
     </section></div>}
   </main>
 }

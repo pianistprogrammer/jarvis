@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 set -u
+cd "$(dirname "$0")/.."
+source scripts/load-env.sh || exit 1
+audio_port="${AUDIO_PORT:-8100}"
+llm_port="${LLM_PORT:-8180}"
 
 failures=0
 check_command() {
@@ -18,8 +22,8 @@ check_command ffmpeg
 [[ -x .venv/bin/mlx_audio.server ]] && echo "✓ MLX-Audio virtual environment" || { echo "✗ missing MLX-Audio; run npm run setup:mac"; failures=$((failures + 1)); }
 [[ -d node_modules ]] && echo "✓ Node dependencies" || { echo "✗ missing Node dependencies"; failures=$((failures + 1)); }
 
-if curl -fsS --max-time 2 http://127.0.0.1:8080/health >/dev/null 2>&1; then echo "✓ llama.cpp is healthy"; else echo "· llama.cpp is not running"; fi
-if curl -fsS --max-time 2 http://127.0.0.1:8000/ >/dev/null 2>&1; then echo "✓ MLX-Audio is healthy"; else echo "· MLX-Audio is not running"; fi
+if curl -fsS --max-time 2 "http://127.0.0.1:$llm_port/health" >/dev/null 2>&1; then echo "✓ llama.cpp is healthy"; else echo "· llama.cpp is not running"; fi
+if curl -fsS --max-time 2 "http://127.0.0.1:$audio_port/" >/dev/null 2>&1; then echo "✓ MLX-Audio is healthy"; else echo "· MLX-Audio is not running"; fi
 
 if (( failures )); then echo "$failures required check(s) failed."; exit 1; fi
 echo "Required installation checks passed."
