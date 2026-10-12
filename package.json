@@ -21,7 +21,8 @@
     "browser:install": "playwright install chromium",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test:duplex": "node tests/duplex-data.test.mjs"
+    "test:duplex": "node tests/duplex-data.test.mjs",
+    "lora:train": "node scripts/duplex/run-lora.mjs"
   },
   "dependencies": {
     "@ricky0123/vad-web": "^0.0.31",

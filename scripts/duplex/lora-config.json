@@ -1,0 +1,12 @@
+{
+  "model": "mlx-community/Mistral-7B-Instruct-v0.3-4bit",
+  "dataDir": "data/duplex",
+  "iters": 4000,
+  "batchSize": 16,
+  "learningRate": 1e-5,
+  "maskPrompt": true,
+  "loraR": 16,
+  "loraAlpha": 32,
+  "targetModules": ["q_proj", "v_proj"],
+  "lastKLayers": 4
+}
