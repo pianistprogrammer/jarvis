@@ -7,7 +7,7 @@ const cfgPath = process.argv.includes('--config')
   : 'scripts/duplex/lora-config.json';
 const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
 
-// Build CLI args for mlx_lm.lora; not all flags exist in every version.
+// Build CLI args for mlx_lm lora; be compatible with older CLI.
 const baseArgs = [
   'lora',
   '--model', cfg.model,
@@ -15,12 +15,10 @@ const baseArgs = [
   '--iters', String(cfg.iters),
   '--batch-size', String(cfg.batchSize),
   '--learning-rate', String(cfg.learningRate),
+  '--fine-tune-type', 'lora'
 ];
 if (cfg.maskPrompt) baseArgs.push('--mask-prompt');
-if (cfg.loraR) baseArgs.push('--lora-r', String(cfg.loraR));
-if (cfg.loraAlpha) baseArgs.push('--lora-alpha', String(cfg.loraAlpha));
-if (cfg.targetModules?.length) baseArgs.push('--lora-target-modules', cfg.targetModules.join(','));
-if (cfg.lastKLayers) baseArgs.push('--lora-last-k-layers', String(cfg.lastKLayers));
+if (cfg.lastKLayers) baseArgs.push('--num-layers', String(cfg.lastKLayers));
 
 console.log('> mlx_lm', baseArgs.join(' '));
 const p = spawn('mlx_lm', baseArgs, { stdio: 'inherit' });
