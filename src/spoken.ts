@@ -14,14 +14,14 @@ export function toSpokenText(text: string) {
 
 // Group sentences for cadence without waiting indefinitely for a long response.
 // Final short replies remain short; never invent padding to reach a target size.
-export function takeSpeechChunks(text: string, final = false) {
+export function takeSpeechChunks(text: string, final = false, minimum = 150) {
   const chunks: string[] = []
   let remaining = text.trimStart()
-  while (remaining.length >= 150 || (final && remaining.length)) {
+  while (remaining.length >= minimum || (final && remaining.length)) {
     const ends = [...remaining.matchAll(/[.!?]["')\]]*(?=\s|$)/g)]
       .map(match => match.index! + match[0].length)
       .filter(end => end <= 250)
-    let cut = ends.find(end => end >= 150)
+    let cut = ends.find(end => end >= minimum)
     if (!cut && remaining.length > 250) {
       cut = ends.at(-1) || remaining.lastIndexOf(' ', 250)
       if (cut <= 0) cut = 250

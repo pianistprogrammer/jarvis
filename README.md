@@ -9,7 +9,7 @@ Jarvis is a near-real-time, voice-first agent that runs on an Apple silicon Mac.
 - Hands-free microphone capture with local turn detection, echo-cancellation request, and barge-in
 - MLX Parakeet speech-to-text through an OpenAI-compatible API
 - Qwen3.8 9B Distill through llama.cpp and Metal
-- Qwen3-TTS 1.7B 6-bit speech through MLX-Audio, with sentence-level generation/playback overlap
+- Kokoro speech through MLX-Audio by default, with optional Qwen3-TTS and sentence-level generation/playback overlap
 - Streaming OpenAI-compatible tool calls
 - Persistent Playwright Chromium with snapshots, click/type tools, optional domain allowlist, and live screenshots
 - Workspace-scoped file tools, calculator, time, and a guarded local shell
@@ -26,7 +26,7 @@ Jarvis uses the same modular cascade with Apple-native substitutions. It detects
 | Turn detection | Browser Silero VAD | Speech-aware detection and immediate barge-in |
 | STT | `mlx-community/parakeet-tdt-0.6b-v3` | Fast local speech recognition |
 | LLM | `empero-ai/Qwen3.8-9B-Distill-GGUF:Q4_K_M` | Strong local reasoning with a moderate memory footprint |
-| TTS | `mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-6bit` | Natural voice with controllable style; Kokoro remains available |
+| TTS | `mlx-community/Kokoro-82M-4bit` | Fast, consistent local voice; Qwen3-TTS remains available |
 | Browser | Playwright Chromium | Persistent profile and deterministic controls |
 
 The 9B Q4_K_M model is used on both compact and full profiles, with a 64K context. Parakeet remains the local speech recognizer.
@@ -94,7 +94,7 @@ After setup, `npm run doctor` checks the machine and service health. `npm test`,
 
 ## Configuration
 
-Copy `.env.example` to `.env`. The important options are `LLM_BASE_URL`, `LLM_PORT`, `LLM_MODEL`, `LLM_CONTEXT_SIZE`, `AUDIO_PORT`, `STT_URL`, `STT_MODEL`, `TTS_PROVIDER`, `TTS_URL`, `TTS_MODEL`, `TTS_VOICE`, `TTS_LANG_CODE`, `TTS_INSTRUCT`, `TTS_TEMPERATURE`, `TTS_TOP_P`, `TTS_TOP_K`, `TTS_REPETITION_PENALTY`, `TTS_SPEED`, `TTS_STREAMING_INTERVAL`, `AGENT_WORKSPACE`, and `BROWSER_ALLOWLIST`. `TTS_PROVIDER` defaults to `qwen3-tts`; set it to `kokoro` to restore Kokoro. Qwen3-TTS defaults to Ryan with a calm agent instruction, temperature `0.35`, top-p `0.9`, top-k `20`, repetition penalty `1.05`, speed `1.05`, and a `0.32` second streaming interval; tune these values in `.env`. `LLM_CONTEXT_SIZE` and the TTS sampling settings are passed through to the local runtimes. `LLM_PORT` defaults to `8180`; `AUDIO_PORT` defaults to `8100`. Models use `JARVIS_MODEL_CACHE` when set, or fall back to `data/model-cache` if the inherited Hugging Face cache is unavailable.
+Copy `.env.example` to `.env`. Kokoro is the default TTS provider. To switch to Qwen3-TTS, set `TTS_PROVIDER=qwen3-tts`, use the Qwen model and `TTS_VOICE=Ryan` shown in `.env.example`, then relaunch. Set `TTS_PROVIDER=kokoro` with `mlx-community/Kokoro-82M-4bit` and a Kokoro voice such as `af_heart` to switch back. The important options are `LLM_BASE_URL`, `LLM_PORT`, `LLM_MODEL`, `LLM_CONTEXT_SIZE`, `AUDIO_PORT`, `STT_URL`, `STT_MODEL`, `TTS_PROVIDER`, `TTS_URL`, `TTS_MODEL`, `TTS_VOICE`, `TTS_LANG_CODE`, `TTS_INSTRUCT`, `TTS_TEMPERATURE`, `TTS_TOP_P`, `TTS_TOP_K`, `TTS_REPETITION_PENALTY`, `TTS_SPEED`, `TTS_STREAMING_INTERVAL`, `AGENT_WORKSPACE`, and `BROWSER_ALLOWLIST`. `LLM_CONTEXT_SIZE` and the TTS sampling settings are passed through to the local runtimes. `LLM_PORT` defaults to `8180`; `AUDIO_PORT` defaults to `8100`. Models use `JARVIS_MODEL_CACHE` when set, or fall back to `data/model-cache` if the inherited Hugging Face cache is unavailable.
 
 ## Attribution
 

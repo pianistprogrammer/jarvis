@@ -98,7 +98,7 @@ else
 fi
 
 if [[ "$audio_ready" == false ]]; then
-echo "Starting MLX-Audio (Parakeet + ${TTS_PROVIDER:-qwen3-tts}) on port ${audio_port}…"
+echo "Starting MLX-Audio (Parakeet + ${TTS_PROVIDER:-kokoro}) on port ${audio_port}…"
 .venv/bin/mlx_audio.server --host 127.0.0.1 --port "$audio_port" \
   > >(tee -a logs/mlx-audio.log "$app_log") 2>&1 &
 audio_pid="$!"

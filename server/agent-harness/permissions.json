@@ -1,0 +1,11 @@
+{
+  "rules": [
+    { "tool": "Bash", "pattern": "git status", "tier": "allow" },
+    { "tool": "Bash", "pattern": "npm run test:*", "tier": "allow" },
+    { "tool": "Bash", "pattern": "sudo:*", "tier": "deny" },
+    { "tool": "Bash", "pattern": "rm -rf*", "tier": "deny" },
+    { "tool": "Bash", "pattern": "rm *", "tier": "ask" },
+    { "tool": "Bash", "pattern": "git push:*", "tier": "ask" },
+    { "tool": "Bash", "pattern": "npm publish:*", "tier": "ask" }
+  ]
+}

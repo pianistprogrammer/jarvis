@@ -35,3 +35,12 @@ test('long speech is bounded, punctuated, and preserves all words', () => {
 test('speech normalization spells known initialisms and removes stage laughter', () => {
   assert.equal(toSpokenText('AI costs $45, down 10%. *laughs*'), 'A I costs 45 dollars, down 10 percent.')
 })
+
+test('latency flush releases a complete sentence without cutting an unfinished thought', () => {
+  const complete = 'I found the page and will check the details.'
+  const pending = ' The next thing I need to'
+  assert.deepEqual(takeSpeechChunks(complete + pending, false, 40), {
+    chunks: [complete], remaining: pending.trimStart(),
+  })
+  assert.deepEqual(takeSpeechChunks(pending, false, 40).chunks, [])
+})

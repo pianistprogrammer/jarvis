@@ -61,6 +61,7 @@ export class AgentSession {
     this.history.push({ role: 'user', content: text })
     this.send({ type: 'user', text })
     let failures = 0
+    let browserCueSent = false
     let stopReason = ''
     const repeated = new Map<string, number>()
     try {
@@ -85,7 +86,10 @@ export class AgentSession {
           this.send({ type: 'tool_start', id: call.id, name: call.function.name })
           if (call.function.name.startsWith('browser_')) {
             this.send({ type: 'browser_active' })
-            this.send({ type: 'notice', text: toolProgressCue(call.function.name) })
+            if (!browserCueSent && !result.text.trim()) {
+              this.send({ type: 'notice', text: toolProgressCue(call.function.name) })
+            }
+            browserCueSent = true
           }
           try {
             if (stopReason) throw new Error(stopReason)

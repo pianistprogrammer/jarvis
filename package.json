@@ -20,24 +20,32 @@
     "doctor": "bash scripts/doctor.sh",
     "browser:install": "playwright install chromium",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:duplex": "node tests/duplex-data.test.mjs"
   },
   "dependencies": {
     "@ricky0123/vad-web": "^0.0.31",
+    "axios": "^1.20.0",
+    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "mathjs": "^15.2.0",
     "playwright": "^1.63.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "socket.io": "^4.8.3",
     "ws": "^8.21.3",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
+    "@types/socket.io": "^3.0.1",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.1.1",
     "concurrently": "^10.0.5",

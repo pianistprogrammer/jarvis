@@ -8,7 +8,7 @@ audio_port="${AUDIO_PORT:-8100}"
 llm_port="${LLM_PORT:-8180}"
 app_port="${PORT:-4100}"
 stt_model="${STT_MODEL:-mlx-community/parakeet-tdt-0.6b-v3}"
-tts_provider="${TTS_PROVIDER:-qwen3-tts}"
+tts_provider="${TTS_PROVIDER:-kokoro}"
 if [[ "$tts_provider" == "kokoro" ]]; then
   tts_model="${TTS_MODEL:-mlx-community/Kokoro-82M-4bit}"
 else

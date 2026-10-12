@@ -7,7 +7,7 @@ const requestedProfile = process.env.MODEL_PROFILE
 const fullProfile = requestedProfile === 'full' || (requestedProfile !== 'compact' && os.totalmem() >= 32 * 1024 ** 3)
 const audioPort = Number(process.env.AUDIO_PORT || 8100)
 const llmPort = Number(process.env.LLM_PORT || 8180)
-const ttsProvider = process.env.TTS_PROVIDER || 'qwen3-tts'
+const ttsProvider = process.env.TTS_PROVIDER || 'kokoro'
 if (ttsProvider !== 'kokoro' && ttsProvider !== 'qwen3-tts') throw new Error('TTS_PROVIDER must be kokoro or qwen3-tts')
 const qwenTts = ttsProvider === 'qwen3-tts'
 const audioUrl = (configured: string | undefined, path: string) => configured?.replace('127.0.0.1:8000', `127.0.0.1:${audioPort}`) || `http://127.0.0.1:${audioPort}${path}`
@@ -26,7 +26,7 @@ export const config = {
   llmBaseUrl: llmUrl.replace(/\/$/, ''),
   llmApiKey: process.env.LLM_API_KEY || 'local-no-key',
   llmModel: process.env.LLM_MODEL || 'qwen-local',
-  llmContextSize: numberSetting('LLM_CONTEXT_SIZE', 32768),
+  llmContextSize: numberSetting('LLM_CONTEXT_SIZE', 65536),
   sttUrl: audioUrl(process.env.STT_URL, '/v1/audio/transcriptions'),
   sttModel: process.env.STT_MODEL || 'mlx-community/parakeet-tdt-0.6b-v3',
   ttsUrl: audioUrl(process.env.TTS_URL, '/v1/audio/speech'),

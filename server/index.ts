@@ -8,11 +8,16 @@ import { agentBrowser } from './browser.js'
 import { AgentSession } from './agent.js'
 import { frameAudioChunk } from './audio-stream.js'
 import { attachBrowserUpgrade, mountBrowserProxy } from './browser-proxy.js'
+// AgentHarness backend integration
+import { createHarnessIntegration } from './agent-harness-integration.js'
 
 await mkdir(config.workspace, { recursive: true })
 const app = express()
 app.disable('x-powered-by')
+// Mount AgentHarness routes and features
+createHarnessIntegration(app)
 app.use(express.json({ limit: '2mb' }))
+
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, profile: config.profile, model: config.llmModel, workspace: config.workspace }))
 app.get('/api/config', (_req, res) => res.json({ profile: config.profile, llmModel: config.llmModel, sttModel: config.sttModel, ttsProvider: config.ttsProvider, ttsModel: config.ttsModel, ttsVoice: config.ttsVoice }))
@@ -69,7 +74,10 @@ app.post('/api/tts', async (req, res) => {
     }
     if (pending.length) res.write(frameAudioChunk(pending))
     res.end()
-  } catch (error) { if (!res.headersSent) res.status(502).json({ error: error instanceof Error ? error.message : String(error) }); else res.end() }
+  } catch (error) {
+    if (!res.headersSent) res.status(502).json({ error: error instanceof Error ? error.message : String(error) })
+    else res.destroy(error instanceof Error ? error : new Error(String(error)))
+  }
 })
 
 const dist = path.resolve('dist')
