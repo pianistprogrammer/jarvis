@@ -2,7 +2,10 @@
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 
-const cfg = JSON.parse(fs.readFileSync('scripts/duplex/lora-config.json', 'utf-8'));
+const cfgPath = process.argv.includes('--config')
+  ? process.argv[process.argv.indexOf('--config') + 1]
+  : 'scripts/duplex/lora-config.json';
+const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
 
 // Build CLI args for mlx_lm.lora; not all flags exist in every version.
 const baseArgs = [

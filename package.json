@@ -22,7 +22,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test:duplex": "node tests/duplex-data.test.mjs",
-    "lora:train": "node scripts/duplex/run-lora.mjs"
+    "lora:train": "node scripts/duplex/run-lora.mjs",
+    "lora:smoke": "node scripts/duplex/run-lora.mjs --config scripts/duplex/lora-config-smoke.json"
   },
   "dependencies": {
     "@ricky0123/vad-web": "^0.0.31",

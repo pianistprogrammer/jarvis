@@ -1,0 +1,12 @@
+{
+  "model": "mlx-community/Qwen3.5-9B-MLX-4bit",
+  "dataDir": "data/duplex",
+  "iters": 100,
+  "batchSize": 8,
+  "learningRate": 5e-6,
+  "maskPrompt": true,
+  "loraR": 8,
+  "loraAlpha": 16,
+  "targetModules": ["q_proj", "v_proj"],
+  "lastKLayers": 4
+}
