@@ -19,6 +19,8 @@ const baseArgs = [
 ];
 if (cfg.maskPrompt) baseArgs.push('--mask-prompt');
 if (cfg.lastKLayers) baseArgs.push('--num-layers', String(cfg.lastKLayers));
+if (cfg.valBatches) baseArgs.push('--val-batches', String(cfg.valBatches));
+if (cfg.gradAccumulationSteps) baseArgs.push('--grad-accumulation-steps', String(cfg.gradAccumulationSteps));
 if (cfg.adapterPath) baseArgs.push('--adapter-path', cfg.adapterPath);
 
 console.log('> mlx_lm', baseArgs.join(' '));
