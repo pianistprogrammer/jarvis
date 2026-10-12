@@ -19,6 +19,7 @@ const baseArgs = [
 ];
 if (cfg.maskPrompt) baseArgs.push('--mask-prompt');
 if (cfg.lastKLayers) baseArgs.push('--num-layers', String(cfg.lastKLayers));
+if (cfg.adapterPath) baseArgs.push('--adapter-path', cfg.adapterPath);
 
 console.log('> mlx_lm', baseArgs.join(' '));
 const p = spawn('mlx_lm', baseArgs, { stdio: 'inherit' });
