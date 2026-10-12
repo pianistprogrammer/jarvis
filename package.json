@@ -21,7 +21,8 @@
     "browser:install": "playwright install chromium",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test:duplex": "node tests/duplex-data.test.mjs",
+    "test:duplex": "node tests/duplex-data.test.mjs && node tests/duplex-natural-corpus.test.mjs",
+    "data:duplex:natural": "node scripts/duplex/generate-natural-corpus.mjs",
     "lora:train": "node scripts/duplex/run-lora.mjs",
     "lora:smoke": "node scripts/duplex/run-lora.mjs --config scripts/duplex/lora-config-smoke.json"
   },

@@ -1,123 +1,149 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
-import readline from 'node:readline';
+import path from 'node:path';
 import { createInterface } from 'node:readline';
 
 function parseArgs() {
   const args = process.argv.slice(2);
-  const out = {
+  const options = {
     in: null,
     out: null,
     devOut: null,
     sliceMs: 600,
     minUserTok: 1,
     maxUserTok: 7,
-    listenRatio: 0.7,
     maxPhraseWords: 6,
     devSplit: 0.05,
     seed: 42,
   };
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    const v = args[i + 1];
-    if (a === '--in') out.in = v;
-    if (a === '--out') out.out = v;
-    if (a === '--dev-out') out.devOut = v;
-    if (a === '--slice-ms') out.sliceMs = parseInt(v, 10);
-    if (a === '--min-user-tok') out.minUserTok = parseInt(v, 10);
-    if (a === '--max-user-tok') out.maxUserTok = parseInt(v, 10);
-    if (a === '--listen-ratio') out.listenRatio = parseFloat(v);
-    if (a === '--max-phrase-words') out.maxPhraseWords = parseInt(v, 10);
-    if (a === '--dev-split') out.devSplit = parseFloat(v);
-    if (a === '--seed') out.seed = parseInt(v, 10);
+
+  for (let index = 0; index < args.length; index += 1) {
+    const key = args[index];
+    const value = args[index + 1];
+    if (key === '--in') options.in = value;
+    if (key === '--out') options.out = value;
+    if (key === '--dev-out') options.devOut = value;
+    if (key === '--slice-ms') options.sliceMs = Number.parseInt(value, 10);
+    if (key === '--min-user-tok') options.minUserTok = Number.parseInt(value, 10);
+    if (key === '--max-user-tok') options.maxUserTok = Number.parseInt(value, 10);
+    if (key === '--max-phrase-words') options.maxPhraseWords = Number.parseInt(value, 10);
+    if (key === '--dev-split') options.devSplit = Number.parseFloat(value);
+    if (key === '--seed') options.seed = Number.parseInt(value, 10);
   }
-  if (!out.in || !out.out || !out.devOut) {
-    console.error('Usage: build-duplex-data.mjs --in raw.jsonl --out train.jsonl --dev-out dev.jsonl [--slice-ms 600 --listen-ratio 0.7]');
-    process.exit(1);
+
+  if (!options.in || !options.out || !options.devOut) {
+    throw new Error('Usage: build-duplex-data.mjs --in raw.jsonl --out train.jsonl --dev-out dev.jsonl');
   }
-  return out;
+
+  return options;
 }
 
-function rand(seed) {
-  // xorshift32
-  let x = seed >>> 0;
+function makeRandom(seed) {
+  let state = seed >>> 0;
   return () => {
-    x ^= x << 13; x ^= x >>> 17; x ^= x << 5; x >>>= 0;
-    return x / 0xFFFFFFFF;
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return (state >>> 0) / 0xffffffff;
   };
 }
 
-function splitIntoTokens(text) {
+function words(text) {
   return text.trim().split(/\s+/).filter(Boolean);
 }
 
-function chunkUserUtterance(text, minTok, maxTok, rng) {
-  const toks = splitIntoTokens(text);
-  const chunks = [];
-  let i = 0;
-  while (i < toks.length) {
-    const span = Math.max(minTok, Math.min(maxTok, 1 + Math.floor(rng() * maxTok)));
-    const end = Math.min(toks.length, i + span);
-    chunks.push(toks.slice(i, end).join(' '));
-    i = end;
+function splitMicroTurns(text, minWords, maxWords, random) {
+  const tokens = words(text);
+  const slices = [];
+  let index = 0;
+
+  while (index < tokens.length) {
+    const span = Math.max(minWords, Math.min(maxWords, 1 + Math.floor(random() * maxWords)));
+    slices.push(tokens.slice(index, index + span).join(' '));
+    index += span;
   }
-  return chunks;
+
+  return slices;
 }
 
-function maybeShortPhrase(text, maxWords) {
-  const toks = splitIntoTokens(text);
-  if (toks.length <= maxWords) return text;
-  return toks.slice(0, maxWords).join(' ');
+function toShortPhrase(text, maxWords) {
+  return words(text).slice(0, maxWords).join(' ');
+}
+
+function toRecord(prompt, completion) {
+  return { prompt, completion };
 }
 
 async function main() {
-  const cfg = parseArgs();
-  const rng = rand(cfg.seed);
-  const path = await import('node:path');
-  fs.mkdirSync(path.dirname(cfg.out), { recursive: true });
-  fs.mkdirSync(path.dirname(cfg.devOut), { recursive: true });
-  const train = fs.createWriteStream(cfg.out);
-  const dev = fs.createWriteStream(cfg.devOut);
+  const options = parseArgs();
+  const random = makeRandom(options.seed);
+  const records = [];
+  const input = createInterface({ input: fs.createReadStream(options.in) });
 
-  const rl = createInterface({ input: fs.createReadStream(cfg.in) });
-  for await (const line of rl) {
+  for await (const line of input) {
     if (!line.trim()) continue;
-    let rec;
-    try { rec = JSON.parse(line); } catch { continue; }
-    const messages = rec.messages || [];
-    // Build alternating micro-turns from user/assistant long turns
+
+    let dialogue;
+    try {
+      dialogue = JSON.parse(line);
+    } catch {
+      continue;
+    }
+
     let history = [];
-    for (let idx = 0; idx < messages.length; idx++) {
-      const m = messages[idx];
-      const role = m.role;
-      const text = (m.content || '').trim();
-      if (!text) continue;
-      if (role === 'user') {
-        // Split user into micro-turns; for each, target is LISTEN most of the time
-        const chunks = chunkUserUtterance(text, cfg.minUserTok, cfg.maxUserTok, rng);
-        for (let c = 0; c < chunks.length; c++) {
-          const userSlice = chunks[c];
-          const input = history.join('\n') + (history.length ? '\n' : '') + `user: ${userSlice}`;
-          const output = 'LISTEN';
-          const row = { input, output };
-          (rng() < cfg.devSplit ? dev : train).write(JSON.stringify(row) + '\n');
-          history.push(`assistant: ${output}`);
-          if (history.length > 40) history = history.slice(-40);
+    for (const message of dialogue.messages ?? []) {
+      const content = String(message.content ?? '').trim();
+      if (!content) continue;
+
+      if (message.role === 'user') {
+        for (const slice of splitMicroTurns(content, options.minUserTok, options.maxUserTok, random)) {
+          const prompt = [...history, `user: ${slice}`].join('\n');
+          records.push(toRecord(prompt, '<listen>'));
+          history.push('assistant: <listen>');
+          history = history.slice(-40);
         }
-      } else if (role === 'assistant') {
-        // Compress assistant response into one or two short micro-turns
-        const phrase = maybeShortPhrase(text, cfg.maxPhraseWords);
-        const input = history.join('\n') + (history.length ? '\n' : '') + 'user: [NO_VOICE]';
-        const output = phrase || 'LISTEN';
-        const row = { input, output };
-        (rng() < cfg.devSplit ? dev : train).write(JSON.stringify(row) + '\n');
-        history.push(`assistant: ${output}`);
-        if (history.length > 40) history = history.slice(-40);
+      }
+
+      if (message.role === 'assistant') {
+        const prompt = [...history, 'user: [NO_VOICE]'].join('\n');
+        const completion = toShortPhrase(content, options.maxPhraseWords) || '<listen>';
+        records.push(toRecord(prompt, completion));
+        history.push(`assistant: ${completion}`);
+        history = history.slice(-40);
       }
     }
   }
-  train.end();
-  dev.end();
+
+  if (records.length < 2) {
+    throw new Error('Need at least two generated records to create train and validation data.');
+  }
+
+  const train = [];
+  const valid = [];
+  for (const record of records) {
+    (random() < options.devSplit ? valid : train).push(record);
+  }
+
+  // MLX LM requires a non-empty validation file if it exists. Guarantee one for small datasets.
+  if (valid.length === 0) valid.push(train.pop());
+  if (train.length === 0) train.push(valid.pop());
+
+  const writeJsonl = (file, rows) => fs.writeFileSync(file, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`);
+  const dataDir = path.dirname(options.out);
+  const validPath = path.join(dataDir, 'valid.jsonl');
+  const testPath = path.join(dataDir, 'test.jsonl');
+
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.mkdirSync(path.dirname(options.devOut), { recursive: true });
+  writeJsonl(options.out, train);
+  writeJsonl(options.devOut, valid);
+  writeJsonl(validPath, valid);
+  fs.rmSync(testPath, { force: true });
+
+  console.log(`Wrote ${train.length} train and ${valid.length} validation micro-turns (${options.sliceMs}ms target window).`);
 }
 
-main().catch(err => { console.error(err); process.exit(1); });
+main().catch((error) => {
+  console.error(error.message);
+  process.exit(1);
+});

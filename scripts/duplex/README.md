@@ -1,80 +1,57 @@
-# Duplex LoRA (MLX) — Data + Training
+# Duplex LoRA (MLX)
 
-This module prepares micro-turn SFT data and runs a small LoRA on an MLX model to teach duplex behavior (LISTEN vs short speech) for full-duplex voice loops.
+This module prepares text-only, VAD-free duplex data for an MLX LoRA. The model receives streaming-ASR micro-turns every ~600 ms and outputs either `<listen>` or at most three spoken words.
 
-## Overview
-- Data builder: turns normal dialogues into 600 ms “micro-turns” with tags:
-  - `[NO_VOICE]` for silent slice
-  - `LISTEN` for assistant stay-silent turn
-  - Short speech (≤6 words) for assistant speaking turns
-- Trainer: runs `mlx_lm.lora` on a 7B MLX model (quantized) with balanced targets
-- Inference: load adapters in your voice loop; keep `n_predict` small and trim LISTEN-only turns from history
+## Dataset
 
-## Install
-```bash
-pip install mlx-lm whispermlx sounddevice
-# Piper TTS installed separately if you want to run the loop end-to-end
+The generated corpus is stored outside the repository:
+
+```text
+/Volumes/AI/Datasets/jarvis-duplex/
+├── train.jsonl          # 10,000 MLX-compatible ticks
+├── valid.jsonl          # 1,500 held-out ticks
+├── test.jsonl           # 1,500 held-out ticks
+├── calls_train.jsonl    # call-level source sequences
+├── calls_valid.jsonl
+└── calls_test.jsonl
 ```
 
-## Data Format
-Input: chat JSONL (one per line):
+Each training tick is an MLX completions record:
+
 ```json
-{"messages": [{"role":"user","content":"…"},{"role":"assistant","content":"…"}, ...]}
+{"prompt":"user: so, um I have this\nassistant: <listen>\nuser: coffee grinder issue and","completion":"<listen>","tag":"listen_speech","weight":0.3,"callId":12}
 ```
 
-Output: SFT JSONL (instruction-style) where each record is one micro-turn:
-```json
-{"input":"<history>\nuser: hello [NO_VOICE]","output":"LISTEN"}
-{"input":"<history>\nuser: the grinder is jamming","output":"Try coarser grind"}
-```
+`tag` and `weight` preserve the simulated-call semantics for analysis. Current `mlx_lm lora` trains from `prompt` and `completion`; it does not consume `weight`.
 
-## Commands
-- Build data (train/dev):
+The corpus simulates call-level streaming behavior: partial ASR fragments, hesitation, silence, assistant continuers, turn starts, short ongoing speech, user backchannels, interruptions, and safe hazard warnings. Calls—not individual ticks—are split between train, validation, and test.
+
+## Generate
+
 ```bash
-node scripts/duplex/build-duplex-data.mjs \
-  --in data/raw/chats.jsonl \
-  --out data/duplex/train.jsonl \
-  --dev-out data/duplex/dev.jsonl \
-  --slice-ms 600 --min-user-tok 1 --max-user-tok 7 \
-  --listen-ratio 0.7 --max-phrase-words 6
+node scripts/duplex/generate-natural-corpus.mjs \
+  --out-dir /Volumes/AI/Datasets/jarvis-duplex \
+  --train-size 10000 --valid-size 1500 --test-size 1500 --seed 42
 ```
 
-- LoRA train (example):
+## Train
+
+`lora-config.json` uses the volume dataset:
+
 ```bash
-mlx_lm.lora \
-  --model mlx-community/Mistral-7B-Instruct-v0.3-4bit \
-  --train --data data/duplex \
-  --iters 4000 --batch-size 16 \
-  --learning-rate 1e-5 --mask-prompt
+npm run lora:train
 ```
 
-- Inference with adapters:
+The smoke configuration remains separate and uses the small local fixture:
+
 ```bash
-mlx_lm.generate \
-  --model mlx-community/Mistral-7B-Instruct-v0.3-4bit \
-  --adapter adapters \
-  --prompt "…" --max-tokens 24 --temp 0.2
+npm run lora:smoke
 ```
 
-- Fuse (optional):
-```bash
-mlx_lm.fuse \
-  --model mlx-community/Mistral-7B-Instruct-v0.3-4bit \
-  --adapter-path adapters \
-  --save-path models/mistral-7b-duplex-4bit
-```
+## Runtime contract
 
-## System Prompt (suggested)
-```
-You are a full‑duplex voice assistant. Every ~600 ms you receive a slice of the mic.
-Rules:
-- If user is still speaking, reply exactly: LISTEN
-- If it’s your turn, reply with a short natural phrase (<=6 words). No trailing punctuation if you will continue.
-- On “wait/hold on/stop”, reply LISTEN and stop speaking.
-- Never echo the user. Use [NO_VOICE] to indicate silence slices.
-```
+- `<listen>`: do not speak; retain the streaming loop.
+- Any other completion: synthesize the short phrase immediately.
+- A runtime interruption should immediately stop queued TTS and continue collecting user micro-turns.
 
-## Notes
-- Balance LISTEN vs speech in data (e.g., 60–80% LISTEN) to avoid LISTEN‑spiral or talk‑over.
-- Keep history short (last 20–40 micro‑turns) and drop LISTEN‑only assistant turns at runtime.
-- Use small `max_tokens` at inference to keep phrases brief.
+Keep the latest 20–40 micro-turns, use a small generation limit, and never treat a single silent tick as a completed user turn.

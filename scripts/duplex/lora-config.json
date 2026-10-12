@@ -1,6 +1,6 @@
 {
   "model": "mlx-community/Qwen3.5-9B-MLX-4bit",
-  "dataDir": "data/duplex",
+  "dataDir": "/Volumes/AI/Datasets/jarvis-duplex",
   "iters": 4000,
   "batchSize": 16,
   "learningRate": 1e-5,
