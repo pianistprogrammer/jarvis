@@ -23,7 +23,7 @@
   const windowSamples = 9600;
   const history = [];
   let stream = null, context = null, source = null, processor = null, timer = null;
-  let sampleQueue = [], active = false, sequence = 0, busy = false;
+  let sampleQueue = [], active = false, sequence = 0, busy = false, speaking = false, nextTtsStart = 0, droppedWindows = 0;
   const $ = (id) => document.getElementById(id);
   const setStatus = (text) => { $('status').textContent = text; };
 
@@ -59,34 +59,49 @@
   }
 
   async function decide(text) {
-    const messages = history.slice(-40).concat({ role: 'user', content: 'user: ' + (text || '[NO_VOICE]') });
-    const response = await fetch(modelUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: modelId, messages, max_tokens: 12, temperature: 0 }) });
+    const messages = [
+      { role: 'system', content: 'You are a VAD-free full-duplex voice assistant. You receive one partial speech transcript every 600ms. Output exactly <listen> when the user is continuing, the thought is incomplete, or the input is silence/uncertain. Give a brief backchannel only at a natural clause boundary: <backchannel> followed by at most two words such as mm-hm, yeah, or okay. Give a real answer only when the user clearly finished asking or yielding the turn: <respond> followed by at most three spoken words. Never explain, greet, repeat the transcript, mention placeholders, or output more than one action.' },
+      ...history.slice(-20),
+      { role: 'user', content: 'user: ' + (text || '[NO_VOICE]') },
+    ];
+    const response = await fetch(modelUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: modelId, messages, max_tokens: 6, temperature: 0, stream: false }), signal: AbortSignal.timeout(5000) });
     if (!response.ok) throw new Error('MLX HTTP ' + response.status + ': ' + (await response.text()).slice(0, 200));
     const result = await response.json();
     return String(result.choices?.[0]?.message?.content || '<listen>').trim();
   }
 
-  async function speak(text) {
+  async function speak(text, onFirstAudio) {
     const response = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
     if (!response.ok || !response.body) throw new Error('TTS HTTP ' + response.status);
     const reader = response.body.getReader();
-    let pending = new Uint8Array(0), nextStart = context.currentTime, firstStart = null;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const merged = new Uint8Array(pending.length + value.length); merged.set(pending); merged.set(value, pending.length); pending = merged;
-      while (pending.length >= 4) {
-        const size = new DataView(pending.buffer, pending.byteOffset, pending.byteLength).getUint32(0, true);
-        if (pending.length < size + 4) break;
-        const bytes = pending.slice(4, size + 4); pending = pending.slice(size + 4);
-        const audio = await context.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
-        const node = context.createBufferSource(); node.buffer = audio; node.connect(context.destination);
-        const startAt = Math.max(context.currentTime + 0.015, nextStart); node.start(startAt); nextStart = startAt + audio.duration;
-        if (firstStart === null) firstStart = startAt;
-      }
-    }
-    if (pending.length) throw new Error('Incomplete TTS audio frame');
-    return firstStart === null ? null : Math.max(0, Math.round((firstStart - context.currentTime) * 1000));
+    let pending = new Uint8Array(0), firstAudio = true;
+    return new Promise((resolve, reject) => {
+      const pump = async () => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const merged = new Uint8Array(pending.length + value.length); merged.set(pending); merged.set(value, pending.length); pending = merged;
+            while (pending.length >= 4) {
+              const size = new DataView(pending.buffer, pending.byteOffset, pending.byteLength).getUint32(0, true);
+              if (pending.length < size + 4) break;
+              const bytes = pending.slice(4, size + 4); pending = pending.slice(size + 4);
+              const audio = await context.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+              const node = context.createBufferSource(); node.buffer = audio; node.connect(context.destination);
+              const startAt = Math.max(context.currentTime + 0.015, nextTtsStart); node.start(startAt); nextTtsStart = startAt + audio.duration;
+              if (firstAudio) {
+                firstAudio = false;
+                onFirstAudio(Math.max(0, Math.round((startAt - context.currentTime) * 1000)));
+                resolve();
+              }
+            }
+          }
+          if (firstAudio) resolve();
+        } catch (error) { if (firstAudio) reject(error); else console.error('TTS stream failed', error); }
+        finally { speaking = false; }
+      };
+      void pump();
+    });
   }
 
   function addRow(id, heard, completion, sttMs, modelMs, audibleMs) {
@@ -108,21 +123,31 @@
       const sttStart = performance.now();
       const heard = await transcribe(samples);
       const sttMs = Math.round(performance.now() - sttStart);
-      history.push({ role: 'user', content: 'user: ' + (heard || '[NO_VOICE]') });
       const modelStart = performance.now();
       const completion = await decide(heard);
       const modelMs = Math.round(performance.now() - modelStart);
+      history.push({ role: 'user', content: 'user: ' + (heard || '[NO_VOICE]') });
       const isListen = /^<listen>\s*$/i.test(completion);
       let audibleMs = null;
       if (!isListen) {
-        const phrase = completion.replace(/^<respond>\s*/i, '').trim();
-        history.push({ role: 'assistant', content: phrase });
-        const decisionAt = performance.now();
-        await speak(phrase);
-        audibleMs = Math.round(performance.now() - decisionAt);
+        const actionMatch = completion.match(/^<(backchannel|respond)>\s*(.*)$/is);
+        const phrase = actionMatch ? actionMatch[2].trim() : '';
+        const action = actionMatch ? actionMatch[1].toLowerCase() : '';
+        const allowedWords = action === 'backchannel' ? 2 : 3;
+        const concise = phrase.split(/\s+/).filter(Boolean).slice(0, allowedWords).join(' ');
+        const shouldSpeak = concise && !speaking && (action === 'backchannel' || action === 'respond');
+        if (shouldSpeak) {
+          history.push({ role: 'assistant', content: completion });
+          speaking = true;
+          const decisionAt = performance.now();
+          void speak(concise, (scheduledMs) => {
+            audibleMs = Math.round(performance.now() - decisionAt + scheduledMs);
+            addRow(id, heard, completion, sttMs, modelMs, audibleMs);
+          }).catch((error) => { speaking = false; console.error('TTS failed', error); setStatus(String(error)); });
+        }
       }
+      if (isListen || !speaking) addRow(id, heard, completion, sttMs, modelMs, audibleMs);
       if (history.length > 40) history.splice(0, history.length - 40);
-      addRow(id, heard, completion, sttMs, modelMs, audibleMs);
       setStatus(active ? 'Listening; fixed 600 ms windows' : 'Stopped');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -133,7 +158,7 @@
   async function startStream() {
     if (active) return;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: false, autoGainControl: false } });
       context = new AudioContext(); await context.resume();
       source = context.createMediaStreamSource(stream);
       processor = context.createScriptProcessor(2048, 1, 1);
@@ -147,7 +172,9 @@
       timer = setInterval(() => {
         if (!active || sampleQueue.length < windowSamples) return;
         const samples = new Int16Array(sampleQueue.splice(0, windowSamples));
-        processWindow(samples, ++sequence);
+        const id = ++sequence;
+        if (busy) { droppedWindows += 1; setStatus('Dropping stale windows (' + droppedWindows + '); model is still deciding'); return; }
+        processWindow(samples, id);
       }, windowMs);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
