@@ -23,13 +23,13 @@ test('identifies common silence hallucinations as non-speech', () => {
   assert.equal(isSubstantiveSpeech('Yeah.'), true)
 })
 
-test('suppresses backchannels on short utterances and limits spoken output', () => {
+test('keeps backchannels brief but preserves the full response text', () => {
   assert.equal(selectSpokenAction('<backchannel>mm-hm', 2), null)
   assert.deepEqual(selectSpokenAction('<backchannel>mm-hm okay', 7), {
     action: 'backchannel', text: 'mm-hm okay',
   })
   assert.deepEqual(selectSpokenAction('<respond>Okay, I can do that now', 2), {
-    action: 'respond', text: 'Okay, I can',
+    action: 'respond', text: 'Okay, I can do that now',
   })
   assert.equal(selectSpokenAction('<listen>', 8), null)
 })

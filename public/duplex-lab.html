@@ -146,11 +146,11 @@ import { createSpeechContext, isSubstantiveSpeech, selectSpokenAction } from '/d
 
   async function decide(text) {
     const messages = [
-      { role: 'system', content: 'You are Jarvis in a VAD-free full-duplex conversation. You receive one new transcript micro-turn every 600 ms, including <no voice> when that slice contains no speech. Decide on every micro-turn: output exactly <listen> to stay silent, or use a brief tagged spoken action only when useful. Use <backchannel> plus at most two words rarely, for a substantial thought, never for a short fragment or acknowledgment. Use <respond> plus at most three words for a clear question, request, or urgent correction. If the user starts speaking while you speak, output <listen> and yield immediately. Never narrate or repeat the transcript.' },
+      { role: 'system', content: 'You are Jarvis in a VAD-free full-duplex conversation. You receive one new transcript micro-turn every 600 ms, including <no voice> when that slice contains no speech. Decide on every micro-turn: output exactly <listen> to stay silent, or use a brief tagged spoken action only when useful. Use <backchannel> plus at most two words rarely, for a substantial thought, never for a short fragment or acknowledgment. Use <respond> plus the complete concise answer (up to 24 words) for a clear question, request, or urgent correction. If the user starts speaking while you speak, output <listen> and yield immediately. Never narrate or repeat the transcript.' },
       ...history.slice(-12),
       { role: 'user', content: 'user: ' + (text || '<no voice>') },
     ];
-    const response = await fetch(modelUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: modelId, messages, max_tokens: 12, temperature: 0, stream: false }), signal: AbortSignal.timeout(5000) });
+    const response = await fetch(modelUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: modelId, messages, max_tokens: 64, temperature: 0, stream: false }), signal: AbortSignal.timeout(5000) });
     if (!response.ok) throw new Error('MLX HTTP ' + response.status + ': ' + (await response.text()).slice(0, 200));
     const result = await response.json();
     return String(result.choices?.[0]?.message?.content || '<listen>').trim();

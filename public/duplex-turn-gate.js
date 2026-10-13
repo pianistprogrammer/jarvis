@@ -58,6 +58,7 @@ export function selectSpokenAction(completion, utteranceWordCount = 0) {
   if (!match) return null
   const action = match[1].toLowerCase()
   if (action === 'backchannel' && Number(utteranceWordCount) < 5) return null
-  const text = words(match[2]).slice(0, action === 'backchannel' ? 2 : 3).join(' ')
+  const spokenWords = words(match[2])
+  const text = (action === 'backchannel' ? spokenWords.slice(0, 2) : spokenWords).join(' ')
   return text ? { action, text } : null
 }
