@@ -3,18 +3,34 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Duplex Lab — 600 ms VAD-free</title>
 <style>
-:root{font:15px system-ui;color:#17131d;background:#faf8f0;--accent:#8c35c7}*{box-sizing:border-box}body{margin:0}header,main{max-width:1100px;margin:auto;padding:20px}header{border-bottom:1px solid #e5dfeb}h1{font-size:23px;margin:0 0 5px}p{color:#625b68;margin:0}.controls{display:flex;gap:10px;align-items:center;margin:20px 0}button{border:0;border-radius:9px;padding:11px 16px;font-weight:700;cursor:pointer;background:#eee8f3}button.primary{background:var(--accent);color:white}button:disabled{opacity:.5;cursor:default}.status{margin-left:8px;color:#625b68}.metrics{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}.metric{padding:12px 16px;background:white;border:1px solid #eee8f3;border-radius:10px;min-width:145px}.metric small{display:block;color:#716878;text-transform:uppercase;font-size:10px;letter-spacing:.06em}.metric strong{font-size:20px}.scroll{overflow:auto}table{width:100%;border-collapse:collapse;background:white;font-size:13px}th{text-align:left;background:var(--accent);color:white;padding:8px}td{padding:8px;border-bottom:1px solid #eee8f3}tr.good td{background:#e6f7ed}tr.slow td{background:#fff0ed}.note{font-size:12px;margin:12px 0;color:#625b68}code{font-size:12px}
+:root{font:15px Inter,ui-sans-serif,system-ui;color:#d8e5f2;background:#05070c;--blue:#63c7ff;--orange:#ffad55;--muted:#778397;--line:#1b2634}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 50% -15%,#122032 0,#080d16 42%,#05070c 78%)}header,main{max-width:1280px;margin:auto;padding:20px 28px}header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #17212d;gap:18px}.brand{font-size:11px;letter-spacing:.18em;color:#93a4b9}.brand b{color:var(--blue);font-weight:700}h1{font-size:20px;letter-spacing:.01em;margin:6px 0 0;color:#eef6ff}.controls{display:flex;gap:9px;align-items:center}button{border:1px solid #253247;border-radius:8px;padding:10px 15px;font-weight:650;cursor:pointer;color:#dceaff;background:#111a27}button.primary{background:#15324a;border-color:#2b74a6;color:#9bdcff}button:disabled{opacity:.45;cursor:default}.status{margin-left:8px;color:#b5c5d7;font-size:13px}.status:before{content:"";display:inline-block;width:7px;height:7px;margin-right:8px;border-radius:50%;background:#697789}.status.live:before{background:#54d6a0;box-shadow:0 0 10px #54d6a0}.duplex-panel{position:relative;height:min(67vh,650px);min-height:440px;margin-top:24px;overflow:hidden;border:1px solid #1a2737;border-radius:14px;background:#050a13;box-shadow:0 18px 70px #0008}.duplex-panel:after{position:absolute;inset:0;content:"";pointer-events:none;background:linear-gradient(90deg,#050a13aa,transparent 12%,transparent 88%,#050a13aa)}#waveCanvas{display:block;width:100%;height:100%}.lane-label{position:absolute;z-index:1;left:22px;display:flex;align-items:center;gap:10px;font-size:11px;font-weight:750;letter-spacing:.14em}.lane-label.user{top:27%;color:var(--blue)}.lane-label.assistant{top:55%;color:var(--orange)}.lane-chip{border:1px solid currentColor;border-radius:4px;padding:5px 8px;box-shadow:0 0 14px #0008}.lane-state{font-size:10px;font-weight:500;letter-spacing:.1em;color:#8492a5}.now-marker{position:absolute;z-index:1;top:0;bottom:0;right:9%;width:1px;background:linear-gradient(transparent,#d6e4ff55 12%,#d6e4ff55 88%,transparent)}.now-marker:after{position:absolute;content:"";top:0;bottom:0;left:-10px;width:20px;background:linear-gradient(90deg,transparent,#8fa9d011,transparent)}.panel-caption{position:absolute;z-index:1;left:22px;bottom:20px;color:#d49a50;font-size:12px;letter-spacing:.16em}.panel-caption span{display:block;margin-bottom:5px;color:#a9885d;font-size:9px}.stats{display:grid;grid-template-columns:2fr 1fr 2fr 1fr 1fr;gap:12px;margin-top:14px}.stat{min-height:78px;padding:13px 16px;border:1px solid #182536;border-radius:10px;background:#0b111b}.stat small{display:block;margin-bottom:8px;color:#77879d;font-size:9px;letter-spacing:.15em}.stat strong{display:block;overflow:hidden;color:#d9e5f2;font-size:14px;font-weight:560;text-overflow:ellipsis;white-space:nowrap}.hint{margin:14px 2px 0;color:#768398;font-size:11px}.hint .blue{color:var(--blue)}.hint .orange{color:var(--orange)}@media(max-width:700px){header,main{padding:16px}.controls{flex-wrap:wrap;justify-content:flex-end}.status{width:100%;text-align:right}.duplex-panel{height:62vh;min-height:390px}.stats{grid-template-columns:1fr 1fr}.stat:first-child{grid-column:span 2}.lane-label{left:14px}.panel-caption{left:14px;font-size:10px}}
 </style>
 </head>
 <body>
-<header><h1>Duplex Lab <small style="font-size:12px;color:#625b68">build bd2664f · strict-action mode</small></h1><p>Fixed 600 ms microphone windows · no VAD · MLX LoRA with streaming STT and TTS</p></header>
+<header>
+  <div><div class="brand"><b>JARVIS</b> / DUPLEX LAB · 600 ms MICRO-TURNS</div><h1>Live voice interaction</h1></div>
+  <div class="controls"><button class="primary" id="startBtn">Start listening</button><button id="stopBtn" disabled>Stop</button><span class="status" id="status">Idle</span></div>
+</header>
 <main>
-<div class="controls"><button class="primary" id="startBtn">Start 600 ms stream</button><button id="stopBtn" disabled>Stop</button><span class="status" id="status">Idle</span></div>
-<div class="metrics"><div class="metric"><small>Windows</small><strong id="windows">0</strong></div><div class="metric"><small>Transcript</small><strong id="transcript">—</strong></div><div class="metric"><small>Decision</small><strong id="decision">—</strong></div><div class="metric"><small>Decision → audible</small><strong id="latency">—</strong></div><div class="metric"><small>Under 600 ms</small><strong id="target">—</strong></div></div>
-<p class="note">Mic permission is required. Each 600 ms window is transcribed independently. Silence is sent as audio too. `<listen>` suppresses speech; other outputs are sent to Jarvis TTS. Timings include TTS first-audio decode and scheduled playback.</p>
-<div class="scroll"><table><thead><tr><th>#</th><th>Transcript</th><th>Decision</th><th>STT ms</th><th>Model ms</th><th>Decision → audible ms</th></tr></thead><tbody id="rows"></tbody></table></div>
+  <section class="duplex-panel" aria-label="Live full-duplex audio timeline">
+    <canvas id="waveCanvas" aria-label="Your microphone waveform in blue and Jarvis speech in orange"></canvas>
+    <div class="lane-label user"><span class="lane-chip">ME</span><span class="lane-state" id="micState">MIC IDLE</span></div>
+    <div class="lane-label assistant"><span class="lane-chip">LOCAL LLM</span><span class="lane-state" id="llmState">LISTENING…</span></div>
+    <div class="now-marker"></div>
+    <div class="panel-caption"><span>LIVE DUPLEX</span><span id="panelCaption">listening…</span></div>
+  </section>
+  <section class="stats" aria-live="polite">
+    <div class="stat"><small>YOUR LATEST AUDIO</small><strong id="transcript">Waiting for microphone…</strong></div>
+    <div class="stat"><small>STT WINDOW</small><strong id="sttLatency">—</strong></div>
+    <div class="stat"><small>LOCAL LLM ACTION</small><strong id="decision">—</strong></div>
+    <div class="stat"><small>MODEL WINDOW</small><strong id="modelLatency">—</strong></div>
+    <div class="stat"><small>DECISION → FIRST AUDIO</small><strong id="latency">—</strong></div>
+  </section>
+  <p class="hint"><span class="blue">Blue</span> is incoming microphone audio. <span class="orange">Orange</span> is Jarvis speech. The mic stays live during responses; the model chooses whether to speak or listen on each 600 ms micro-turn.</p>
 </main>
-<script>
+<script type="module">
+import { createSpeechContext, isSubstantiveSpeech, selectSpokenAction } from '/duplex-turn-gate.js';
+
 (() => {
   'use strict';
   const modelUrl = 'http://127.0.0.1:8091/v1/chat/completions';
@@ -22,10 +38,80 @@
   const windowMs = 600;
   const windowSamples = 9600;
   const history = [];
-  let stream = null, context = null, source = null, processor = null, timer = null;
-  let sampleQueue = [], active = false, sequence = 0, busy = false, speaking = false, nextTtsStart = 0, droppedWindows = 0;
+  let speechContext = createSpeechContext(2);
+  let stream = null, context = null, source = null, processor = null, outputGain = null, timer = null;
+  let sampleQueue = [], active = false, sequence = 0, sttBusy = false, modelBusy = false, speaking = false, hasUserSpoken = false, nextTtsStart = 0;
+  let speechController = null, speechReader = null, speechNodes = [], pendingChunk = null, lastBackchannelAt = -Infinity;
+  const userSignals = [], assistantSignals = [], timelineMs = 10000;
   const $ = (id) => document.getElementById(id);
-  const setStatus = (text) => { $('status').textContent = text; };
+  const setStatus = (text) => { $('status').textContent = text; $('status').classList.toggle('live', active); };
+
+  function envelope(samples, bins = 96) {
+    const values = [];
+    for (let bin = 0; bin < bins; bin += 1) {
+      const start = Math.floor(bin * samples.length / bins);
+      const end = Math.floor((bin + 1) * samples.length / bins);
+      let peak = 0;
+      for (let index = start; index < end; index += 1) peak = Math.max(peak, Math.abs(Number(samples[index])));
+      values.push(Math.min(1, peak * (samples instanceof Int16Array ? 1 / 32768 : 1)));
+    }
+    return values;
+  }
+
+  function drawTimeline() {
+    const canvas = $('waveCanvas');
+    const rect = canvas.getBoundingClientRect();
+    const ratio = window.devicePixelRatio || 1;
+    if (canvas.width !== Math.round(rect.width * ratio) || canvas.height !== Math.round(rect.height * ratio)) {
+      canvas.width = Math.round(rect.width * ratio); canvas.height = Math.round(rect.height * ratio);
+    }
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    const width = rect.width, height = rect.height, now = performance.now(), cursor = width * 0.91;
+    ctx.clearRect(0, 0, width, height);
+    const background = ctx.createLinearGradient(0, 0, 0, height);
+    background.addColorStop(0, '#07101b'); background.addColorStop(0.49, '#07101b'); background.addColorStop(0.5, '#090d14'); background.addColorStop(1, '#090b11');
+    ctx.fillStyle = background; ctx.fillRect(0, 0, width, height);
+    ctx.font = '10px ui-monospace, SFMono-Regular, monospace'; ctx.textAlign = 'center';
+    for (let second = 0; second <= 10; second += 1) {
+      const x = cursor - second / 10 * cursor;
+      ctx.strokeStyle = second === 0 ? '#344054' : '#1a2634'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+      if (second < 10) { ctx.fillStyle = '#58677b'; ctx.fillText(second === 0 ? 'NOW' : `-${second}s`, x, height - 10); }
+    }
+    const userCenter = height * 0.34, separator = height * 0.5, assistantCenter = height * 0.53;
+    ctx.strokeStyle = '#283240'; ctx.beginPath(); ctx.moveTo(0, separator); ctx.lineTo(width, separator); ctx.stroke();
+    ctx.strokeStyle = '#263445';
+    for (const center of [userCenter, assistantCenter]) { ctx.beginPath(); ctx.moveTo(0, center); ctx.lineTo(width, center); ctx.stroke(); }
+    const drawLane = (segments, color, center, amplitude, direction) => {
+      ctx.save(); ctx.lineWidth = 2; ctx.strokeStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 12;
+      for (const segment of segments) {
+        const age = now - segment.at;
+        if (age > timelineMs || segment.at > now + 1000) continue;
+        const x0 = cursor - age / timelineMs * cursor;
+        const segmentWidth = segment.duration / timelineMs * cursor;
+        ctx.beginPath();
+        segment.values.forEach((value, index) => {
+          const x = x0 + index / Math.max(1, segment.values.length - 1) * segmentWidth;
+          const y = center + direction * value * amplitude;
+          if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        if (segment.label && x0 > 10 && x0 < cursor - 30) {
+          ctx.shadowBlur = 0; ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
+          ctx.fillText(segment.label.slice(0, 24).toUpperCase(), x0, center + direction * amplitude * 0.56);
+        }
+      }
+      ctx.restore();
+    };
+    const firstUser = userSignals.findIndex((segment) => now - segment.at < timelineMs);
+    const firstAssistant = assistantSignals.findIndex((segment) => now - segment.at < timelineMs);
+    if (firstUser < 0) userSignals.length = 0; else if (firstUser > 0) userSignals.splice(0, firstUser);
+    if (firstAssistant < 0) assistantSignals.length = 0; else if (firstAssistant > 0) assistantSignals.splice(0, firstAssistant);
+    drawLane(userSignals, '#63c7ff', userCenter, height * 0.19, -1);
+    drawLane(assistantSignals, '#ffad55', assistantCenter, height * 0.39, 1);
+    requestAnimationFrame(drawTimeline);
+  }
 
   function makeWav(samples) {
     const buffer = new ArrayBuffer(44 + samples.length * 2);
@@ -60,21 +146,33 @@
 
   async function decide(text) {
     const messages = [
-      { role: 'system', content: 'You are a VAD-free full-duplex voice assistant. You receive one partial speech transcript every 600ms. Output exactly <listen> when the user is continuing, the thought is incomplete, or the input is silence/uncertain. Give a brief backchannel only at a natural clause boundary: <backchannel> followed by at most two words such as mm-hm, yeah, or okay. Give a real answer only when the user clearly finished asking or yielding the turn: <respond> followed by at most three spoken words. Never explain, greet, repeat the transcript, mention placeholders, or output more than one action.' },
-      ...history.slice(-20),
-      { role: 'user', content: 'user: ' + (text || '[NO_VOICE]') },
+      { role: 'system', content: 'You are Jarvis in a VAD-free full-duplex conversation. You receive one new transcript micro-turn every 600 ms, including <no voice> when that slice contains no speech. Decide on every micro-turn: output exactly <listen> to stay silent, or use a brief tagged spoken action only when useful. Use <backchannel> plus at most two words rarely, for a substantial thought, never for a short fragment or acknowledgment. Use <respond> plus at most three words for a clear question, request, or urgent correction. If the user starts speaking while you speak, output <listen> and yield immediately. Never narrate or repeat the transcript.' },
+      ...history.slice(-12),
+      { role: 'user', content: 'user: ' + (text || '<no voice>') },
     ];
-    const response = await fetch(modelUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: modelId, messages, max_tokens: 6, temperature: 0, stream: false }), signal: AbortSignal.timeout(5000) });
+    const response = await fetch(modelUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: modelId, messages, max_tokens: 12, temperature: 0, stream: false }), signal: AbortSignal.timeout(5000) });
     if (!response.ok) throw new Error('MLX HTTP ' + response.status + ': ' + (await response.text()).slice(0, 200));
     const result = await response.json();
     return String(result.choices?.[0]?.message?.content || '<listen>').trim();
   }
 
-  async function speak(text, onFirstAudio) {
-    const response = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+  function stopSpeech() {
+    speechController?.abort();
+    if (speechReader) void speechReader.cancel().catch(() => {});
+    for (const node of speechNodes) { try { node.stop(); } catch {} }
+    speechController = null; speechReader = null; speechNodes = [];
+    speaking = false; nextTtsStart = context?.currentTime || 0;
+    if (active) { $('llmState').textContent = 'LISTENING…'; $('panelCaption').textContent = 'listening…'; }
+  }
+
+  async function speak(text, onAudioChunk) {
+    const controller = new AbortController();
+    speechController = controller;
+    const response = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }), signal: controller.signal });
     if (!response.ok || !response.body) throw new Error('TTS HTTP ' + response.status);
     const reader = response.body.getReader();
-    let pending = new Uint8Array(0), firstAudio = true;
+    speechReader = reader;
+    let pending = new Uint8Array(0), firstAudio = true, streamComplete = false, lastNode = null;
     return new Promise((resolve, reject) => {
       const pump = async () => {
         try {
@@ -87,72 +185,133 @@
               if (pending.length < size + 4) break;
               const bytes = pending.slice(4, size + 4); pending = pending.slice(size + 4);
               const audio = await context.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+              if (controller.signal.aborted || !context) break;
               const node = context.createBufferSource(); node.buffer = audio; node.connect(context.destination);
-              const startAt = Math.max(context.currentTime + 0.015, nextTtsStart); node.start(startAt); nextTtsStart = startAt + audio.duration;
-              if (firstAudio) {
-                firstAudio = false;
-                onFirstAudio(Math.max(0, Math.round((startAt - context.currentTime) * 1000)));
-                resolve();
-              }
+              lastNode = node; speechNodes.push(node);
+              node.onended = () => {
+                speechNodes = speechNodes.filter((activeNode) => activeNode !== node);
+                if (streamComplete && node === lastNode) {
+                  speaking = false;
+                  if (active) { $('llmState').textContent = 'LISTENING…'; $('panelCaption').textContent = 'listening…'; }
+                }
+              };
+              const startAt = Math.max(context.currentTime + 0.015, nextTtsStart);
+              onAudioChunk(audio, Math.max(0, Math.round((startAt - context.currentTime) * 1000)), firstAudio);
+              node.start(startAt); nextTtsStart = startAt + audio.duration;
+              if (firstAudio) { firstAudio = false; resolve(); }
             }
           }
           if (firstAudio) resolve();
-        } catch (error) { if (firstAudio) reject(error); else console.error('TTS stream failed', error); }
-        finally { speaking = false; }
+        } catch (error) {
+          if (controller.signal.aborted) return;
+          if (firstAudio) reject(error); else console.error('TTS stream failed', error);
+        }
+        finally {
+          streamComplete = true;
+          if (!context || !lastNode || nextTtsStart <= context.currentTime) speaking = false;
+          if (speechController === controller) { speechController = null; speechReader = null; }
+        }
       };
       void pump();
     });
   }
 
-  function addRow(id, heard, completion, sttMs, modelMs, audibleMs) {
-    const row = document.createElement('tr');
-    row.className = audibleMs === null ? '' : audibleMs < 600 ? 'good' : 'slow';
-    for (const value of [id, heard || '[NO_VOICE]', completion, sttMs + ' ms', modelMs + ' ms', audibleMs === null ? '— (<listen>)' : audibleMs + ' ms']) {
-      const cell = document.createElement('td'); cell.textContent = String(value); row.appendChild(cell);
-    }
-    $('rows').prepend(row);
-    while ($('rows').children.length > 100) $('rows').lastElementChild.remove();
-    $('windows').textContent = String(id); $('transcript').textContent = heard || '[NO_VOICE]'; $('decision').textContent = completion;
-    $('latency').textContent = audibleMs === null ? '—' : audibleMs + ' ms'; $('target').textContent = audibleMs === null ? '—' : audibleMs < 600 ? 'Yes' : 'No';
+  function showDecision(completion, audibleMs, modelMs) {
+    $('decision').textContent = completion;
+    $('modelLatency').textContent = modelMs + ' ms';
+    $('latency').textContent = audibleMs === null ? '—' : audibleMs + ' ms';
+    const listen = /^<listen>/i.test(completion);
+    $('llmState').textContent = listen ? 'LISTENING…' : 'DECIDING';
+    $('panelCaption').textContent = listen ? 'listening…' : completion.replace(/^<(?:backchannel|respond)>\s*/i, '').slice(0, 32);
   }
 
-  async function processWindow(samples, id) {
-    if (busy) { setStatus('Processing backlog; dropping overlapping model request'); return; }
-    busy = true;
+  async function processWindow(samples, id, capturedAt) {
+    userSignals.push({ at: capturedAt - windowMs, duration: windowMs, values: envelope(samples) });
+    if (sttBusy) return;
+    sttBusy = true;
+    const sttStart = performance.now();
+    let heard, sttMs;
     try {
-      const sttStart = performance.now();
-      const heard = await transcribe(samples);
-      const sttMs = Math.round(performance.now() - sttStart);
-      const modelStart = performance.now();
-      const completion = await decide(heard);
-      const modelMs = Math.round(performance.now() - modelStart);
-      history.push({ role: 'user', content: 'user: ' + (heard || '[NO_VOICE]') });
-      const isListen = /^<listen>\s*$/i.test(completion);
-      let audibleMs = null;
-      if (!isListen) {
-        const actionMatch = completion.match(/^<(backchannel|respond)>\s*(.*)$/is);
-        const phrase = actionMatch ? actionMatch[2].trim() : '';
-        const action = actionMatch ? actionMatch[1].toLowerCase() : '';
-        const allowedWords = action === 'backchannel' ? 2 : 3;
-        const concise = phrase.split(/\s+/).filter(Boolean).slice(0, allowedWords).join(' ');
-        const shouldSpeak = concise && !speaking && (action === 'backchannel' || action === 'respond');
-        if (shouldSpeak) {
-          history.push({ role: 'assistant', content: completion });
-          speaking = true;
-          const decisionAt = performance.now();
-          void speak(concise, (scheduledMs) => {
-            audibleMs = Math.round(performance.now() - decisionAt + scheduledMs);
-            addRow(id, heard, completion, sttMs, modelMs, audibleMs);
-          }).catch((error) => { speaking = false; console.error('TTS failed', error); setStatus(String(error)); });
-        }
-      }
-      if (isListen || !speaking) addRow(id, heard, completion, sttMs, modelMs, audibleMs);
-      if (history.length > 40) history.splice(0, history.length - 40);
-      setStatus(active ? 'Listening; fixed 600 ms windows' : 'Stopped');
+      heard = await transcribe(samples);
+      sttMs = Math.round(performance.now() - sttStart);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
-      console.error('Duplex tick failed', error);
-    } finally { busy = false; }
+      console.error('Duplex STT failed', error);
+      return;
+    } finally { sttBusy = false; }
+
+    $('transcript').textContent = heard || '[NO_VOICE]';
+    $('sttLatency').textContent = sttMs + ' ms';
+    const speech = speechContext.observe(heard);
+    if (isSubstantiveSpeech(heard)) {
+      hasUserSpoken = true;
+      if (speaking) stopSpeech();
+    }
+    const chunk = { id, text: heard || '<no voice>', generation: speech.generation, wordCount: speech.wordCount };
+    if (modelBusy) {
+      pendingChunk = chunk;
+      setStatus('Listening live · refreshing latest model input');
+      return;
+    }
+    void processModelChunk(chunk);
+  }
+
+  async function processModelChunk(chunk) {
+    modelBusy = true;
+    try {
+      const modelStart = performance.now();
+      const completion = await decide(chunk.text);
+      const modelMs = Math.round(performance.now() - modelStart);
+      if (chunk.generation !== speechContext.generation) {
+        if (speaking) stopSpeech();
+        showDecision('<listen> · user is speaking', null, modelMs);
+        return;
+      }
+
+      if (/^<listen>\s*$/i.test(completion) && speaking) stopSpeech();
+      const action = selectSpokenAction(completion, chunk.wordCount);
+      const backchannelTag = /^<backchannel>/i.test(completion);
+      const backchannelAllowed = action?.action !== 'backchannel' || performance.now() - lastBackchannelAt >= 8000;
+      const maySpeak = hasUserSpoken && action && backchannelAllowed && !speaking;
+      history.push({ role: 'user', content: 'user: ' + chunk.text });
+      if (maySpeak) {
+        history.push({ role: 'assistant', content: '<' + action.action + '> ' + action.text });
+        if (action.action === 'backchannel') lastBackchannelAt = performance.now();
+        speaking = true;
+        const decisionAt = performance.now();
+        void speak(action.text, (audio, scheduledMs, firstAudio) => {
+          const startAt = performance.now() + scheduledMs;
+          assistantSignals.push({ at: startAt, duration: audio.duration * 1000, values: envelope(audio.getChannelData(0)), label: firstAudio ? action.text : '' });
+          if (firstAudio) {
+            const audibleMs = Math.round(performance.now() - decisionAt + scheduledMs);
+            showDecision(completion, audibleMs, modelMs);
+            $('llmState').textContent = 'SPEAKING';
+            $('panelCaption').textContent = action.text;
+          }
+        }).catch((error) => {
+          speaking = false;
+          if (error?.name !== 'AbortError') { console.error('TTS failed', error); setStatus(String(error)); }
+        });
+      } else {
+        const untagged = !action && !/^<listen>/i.test(completion);
+        const loggedDecision = !hasUserSpoken && action ? '<listen> · waiting for user' : backchannelTag && !action ? '<listen> · short backchannel suppressed' : action && !backchannelAllowed ? '<listen> · backchannel cooldown' : action && speaking ? '<listen> · already speaking' : untagged ? '<listen> · untagged output suppressed' : completion;
+        const storedDecision = action || untagged || backchannelTag ? '<listen>' : completion;
+        history.push({ role: 'assistant', content: maySpeak ? '<' + action.action + '> ' + action.text : storedDecision });
+        showDecision(loggedDecision, null, modelMs);
+      }
+      if (history.length > 24) history.splice(0, history.length - 24);
+      setStatus(active ? 'Live · listening and deciding each 600 ms micro-turn' : 'Stopped');
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+      console.error('Duplex model failed', error);
+    } finally {
+      modelBusy = false;
+      if (pendingChunk) {
+        const nextChunk = pendingChunk;
+        pendingChunk = null;
+        void processModelChunk(nextChunk);
+      }
+    }
   }
 
   async function startStream() {
@@ -166,15 +325,18 @@
         if (!active) return;
         sampleQueue.push(...downsampleTo16k(event.inputBuffer.getChannelData(0), context.sampleRate));
       };
-      source.connect(processor); processor.connect(context.destination);
-      active = true; sequence = 0; history.length = 0; $('rows').replaceChildren();
-      $('startBtn').disabled = true; $('stopBtn').disabled = false; setStatus('Listening; fixed 600 ms windows');
+      outputGain = context.createGain(); outputGain.gain.value = 0;
+      source.connect(processor); processor.connect(outputGain); outputGain.connect(context.destination);
+      active = true; sequence = 0; history.length = 0; speechContext = createSpeechContext(2); pendingChunk = null; lastBackchannelAt = -Infinity; hasUserSpoken = false;
+      userSignals.length = 0; assistantSignals.length = 0;
+      $('transcript').textContent = 'Waiting for speech…'; $('sttLatency').textContent = '—'; $('decision').textContent = '—'; $('modelLatency').textContent = '—'; $('latency').textContent = '—';
+      $('micState').textContent = 'MIC LIVE'; $('llmState').textContent = 'LISTENING…'; $('panelCaption').textContent = 'listening…';
+      $('startBtn').disabled = true; $('stopBtn').disabled = false; setStatus('Live · listening and deciding each 600 ms micro-turn');
       timer = setInterval(() => {
         if (!active || sampleQueue.length < windowSamples) return;
         const samples = new Int16Array(sampleQueue.splice(0, windowSamples));
         const id = ++sequence;
-        if (busy) { droppedWindows += 1; setStatus('Dropping stale windows (' + droppedWindows + '); model is still deciding'); return; }
-        processWindow(samples, id);
+        void processWindow(samples, id, performance.now());
       }, windowMs);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -185,12 +347,15 @@
   function stopStream() {
     active = false; if (timer) clearInterval(timer); timer = null;
     if (processor) { processor.disconnect(); processor.onaudioprocess = null; processor = null; }
+    if (outputGain) { outputGain.disconnect(); outputGain = null; }
     if (source) { source.disconnect(); source = null; }
     if (stream) { stream.getTracks().forEach((track) => track.stop()); stream = null; }
     if (context) { void context.close(); context = null; }
-    sampleQueue = []; $('startBtn').disabled = false; $('stopBtn').disabled = true; setStatus('Stopped');
+    stopSpeech(); $('micState').textContent = 'MIC IDLE'; $('llmState').textContent = 'STOPPED';
+    sampleQueue = []; pendingChunk = null; hasUserSpoken = false; $('startBtn').disabled = false; $('stopBtn').disabled = true; setStatus('Stopped');
   }
 
+  requestAnimationFrame(drawTimeline);
   $('startBtn').addEventListener('click', startStream);
   $('stopBtn').addEventListener('click', stopStream);
   window.addEventListener('beforeunload', stopStream);
