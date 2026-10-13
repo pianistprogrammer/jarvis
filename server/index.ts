@@ -89,8 +89,10 @@ app.get('/api/duplex/status', (_req, res) => {
 mountBrowserProxy(app)
 app.use(express.static(dist))
 app.get('/duplex-lab', (_req, res) => {
-  try { res.type('html').send(fs.readFileSync(path.resolve(dist, 'duplex-lab.html'), 'utf8')) }
-  catch { res.redirect('/') }
+  const builtPage = path.join(dist, 'duplex-lab.html')
+  const sourcePage = path.resolve('public/duplex-lab.html')
+  const page = fs.existsSync(builtPage) ? builtPage : sourcePage
+  res.sendFile(page)
 })
 app.get('/{*splat}', (_req, res) => res.sendFile(path.join(dist, 'index.html')))
 
