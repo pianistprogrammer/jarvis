@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Duplex Lab — 600 ms VAD-free</title>
+<style>
+:root { --bg:#faf8f0; --fg:#111; --accent:#aa3bff; --good:#059669; --bad:#dc2626; --warn:#b45309; --surface:#fff; }
+* { box-sizing:border-box; }
+html, body { height:100%; margin:0; background:var(--bg); color:var(--fg); font-family:system-ui, -apple-system, Segoe UI, sans-serif; }
+body { display:flex; flex-direction:column; }
+header { padding:16px 24px; border-bottom:1px solid rgba(0,0,0,0.08); background:var(--surface); }
+header h1 { font-size:20px; margin:0 0 4px; letter-spacing:-0.4px; }
+header p { font-size:13px; color:#555; margin:0; }
+main { flex:1; padding:24px 24px 16px; overflow:auto; }
+.controls { display:flex; gap:12px; align-items:center; margin-bottom:16px; }
+button { padding:10px 20px; border-radius:10px; border:1px solid rgba(0,0,0,0.08); background:var(--surface); font-weight:600; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.05); }
+button.primary { background:var(--accent); color:#fff; border-color:transparent; }
+button.danger { color:#c62828; border-color:#fecaca; background:#fff1f0; }
+button:disabled { opacity:.5; cursor:not-allowed; }
+.table { border-collapse:collapse; width:100%; font-size:13px; }
+.table thead th { text-align:left; padding:6px 10px; background:#aa3bff; color:#fff; font-weight:700; border-bottom:1px solid #7a2db8; }
+.table tbody tr { border-bottom:1px solid rgba(0,0,0,0.05); }
+.table tbody td { padding:6px 10px; vertical-align:top; }
+.table tbody tr.ok td { background:#d1fae5; }
+.table tbody tr.warn td { background:#fef9c3; }
+.table tbody tr.bad td { background:#fee2e2; }
+.metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:12px; margin-bottom:16px; }
+.card { background:var(--surface); border:1px solid rgba(0,0,0,0.06); border-radius:12px; padding:14px 16px; box-shadow:0 2px 6px rgba(0,0,0,0.04); }
+.card h4 { margin:0 0 6px; font-size:11px; text-transform:uppercase; letter-spacing:0.6px; color:#555; }
+.card .value { font-size:20px; font-weight:800; letter-spacing:-0.5px; }
+.card.ok .value { color:var(--good); }
+.card.warn .value { color:var(--warn); }
+.card.bad .value { color:var(--bad); }
+.footer { padding:14px 24px; border-top:1px solid rgba(0,0,0,0.08); font-size:13px; color:#666; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Duplex Lab</h1>
+  <p>VAD-free 600 ms micro-turn stream · MLX adapter · Qwen3.5-9B-MLX-4bit</p>
+</header>
+<main>
+  <div class="controls">
+    <button id="startBtn" class="primary" onclick="startStream()">Start 600 ms stream</button>
+    <button onclick="stopStream()" disabled id="stopBtn">Stop</button>
+    <span style="margin-left:auto">Server: <strong>http://127.0.0.1:8091/v1/chat/completions</strong> · Adapter: <code>jarvis-duplex</code></span>
+  </div>
+  <div class="metrics">
+    <div class="card ok" id="card-ticks"><h4>Ticks streamed</h4><div class="value" id="val-ticks">0</div></div>
+    <div class="card ok" id="card-decision"><h4>Latest decision</h4><div class="value" id="val-decision">—</div></div>
+    <div class="card" id="card-time"><h4>Elapsed</h4><div class="value" id="val-time">0.0s</div></div>
+    <div class="card ok" id="card-response"><h4>Response latency</h4><div class="value" id="val-response">—</div></div>
+    <div class="card" id="card-under"><h4>Under 600 ms</h4><div class="value" id="val-under">—</div></div>
+    <div class="card" id="card-count"><h4>Decisions</h4><div class="value" id="val-count">—</div></div>
+  </div>
+  <table class="table" aria-label="Micro-turn stream" id="table-ticks">
+    <thead><tr><th>#</th><th>Time</th><th>Heard (first 60 chars)</th><th>Decision</th><th>Latency (ms)</th><th>Target (ms)</th><th>Result</th></tr></thead>
+    <tbody id="tbody-ticks"></tbody>
+  </table>
+</main>
+<div class="footer">Target: decision-to-audio &lt;600 ms · Stop button ends capture cleanly · History tracks 40 ticks</div>
+<script>
+const MODEL_URL = 'http://127.0.0.1:8091/v1/chat/completions';
+const MODEL_ID = 'mlx-community/Qwen3.5-9B-MLX-4bit';
+const HISTORY_MAX = 40;
+
+let running = false, tickCount = 0, startAt = 0, history = [];
+let timer = null;
+let lastLatencyMs = null;
+
+function nowString() { return new Date().toLocaleTimeString() + '.' + String(new Date().getTime() % 1000).padStart(3, '0'); }
+
+async function callMLX(promptText) {
+  const messages = [
+    ...history.map(m => ({ role: m.role, content: m.content })),
+    { role: 'user', content: promptText.trim() ? promptText.trim() : 'user: ...' },
+  ];
+  const r = await fetch(MODEL_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: MODEL_ID, messages, max_tokens: 5, temperature: 0 }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!r.ok) throw new Error('MLX HTTP ' + r.status);
+  const body = await r.json();
+  return body?.choices?.[0]?.message?.content?.trim() || '<listen>';
+}
+
+function normalizeDecision(text) {
+  const clean = (text || '').trim();
+  return clean === '' ? '<listen>' : clean;
+}
+
+function appendRow(tick, heard, decision, responseMs, targetMs) {
+  tickCount = tick;
+  const tbody = document.getElementById('tbody-ticks');
+  const tr = document.createElement('tr');
+  const result = responseMs !== undefined && responseMs <= 600 ? 'ok' : (responseMs !== undefined ? 'bad' : 'warn');
+  tr.className = result;
+  tr.innerHTML = `<td>${tick}</td><td>${nowString()}</td><td>${(heard || '').replace(/</g, '&lt;').slice(0, 60)}</td><td><strong>${decision}</strong></td><td>${responseMs !== undefined ? responseMs + ' ms' : '-'}</td><td>${targetMs + ' ms'}</td><td>${result.toUpperCase()}</td>`;
+  tbody.prepend(tr);
+  while (tbody.children.length > 100) tbody.removeChild(tbody.lastElementChild);
+  document.getElementById('val-ticks').textContent = tick;
+  document.getElementById('val-decision').textContent = decision;
+  document.getElementById('val-time').textContent = (() => {
+    const elapsed = (performance.now() - startAt) / 1000;
+    return elapsed.toFixed(1) + 's';
+  })();
+  document.getElementById('val-response').textContent = responseMs !== undefined ? responseMs + ' ms' : '—';
+  document.getElementById('val-under').textContent = responseMs !== undefined && responseMs <= 600 ? 'Yes' : (responseMs !== undefined ? 'No' : '—');
+  document.getElementById('val-count').textContent = tick + ' ticks · decisions: ' + tick;
+  const countOfListen = Array.from(tbody.children).filter((c) => (c as HTMLElement).querySelector('td')?.textContent?.includes('listen')).length;
+  document.getElementById('val-count').textContent = tick + ' / ' + tick + ' · <listen> ratio: ' + countOfListen + '/' + tick;
+}
+
+function startStream() {
+  if (running) return;
+  running = true;
+  tickCount = 0; startAt = performance.now(); history = [];
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('stopBtn').disabled = false;
+  document.getElementById('tbody-ticks').innerHTML = '';
+
+  navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1, noiseSuppression: false, echoCancellation: false } }).then((stream) => {
+    const ctx = new AudioContext({ sampleRate: 16000 });
+    const source = ctx.createMediaStreamSource(stream);
+    const processor = ctx.createScriptProcessor(4096, 1, 1);
+    const buffers = [] as Int16Array[];
+    processor.onaudioprocess = (e) => {
+      if (!running) return;
+      const input = e.inputBuffer.getChannelData(0);
+      const int16 = new Int16Array(input.length);
+      for (let i = 0; i < input.length; i++) int16[i] = Math.max(-1, Math.min(1, input[i])) * 0x7fff;
+      buffers.push(new Int16Array(int16));
+    };
+    source.connect(processor);
+    processor.connect(ctx.destination);
+
+    timer = setInterval(async () => {
+      if (!running) return;
+      // Consume exactly 600ms = 9600 samples at 16 kHz
+      const targetSamples = 9600;
+      let used = 0;
+      const combined = new Int16Array(Math.min(targetSamples, buffers.reduce((sum, b) => sum + b.length, 0)));
+      let pos = 0;
+      while (used + buffers[0]?.length < targetSamples && buffers.length) {
+        const b = buffers.shift()!;
+        for (let i = 0; i < b.length; i++) combined[pos++] = b[i];
+        used += b.length;
+      }
+      if (used < targetSamples) return; // not enough audio yet
+      // Convert to simple text representation of audio for the lab (simulated partial transcript placeholder)
+      const simulatedText = '<audio chunk: ' + used + ' samples>';
+      const heard = simulatedText.slice(0, 60);
+      appendRow(tickCount + 1, heard, '<listen>', undefined, 600);
+      const promptForLLM = `user: ${simulatedText}`;
+
+      const t0 = performance.now();
+      try {
+        const decision = await callMLX(promptForLLM);
+        const normalized = normalizeDecision(decision);
+        const latency = Math.round(performance.now() - t0);
+        appendRow(tickCount + 1, heard, normalized, latency, 600);
+        history.push(`user: ${simulatedText}`);
+        if (normalized !== '<listen>') {
+          history.push(`assistant: ${normalized}`);
+          if (history.length > HISTORY_MAX) history = history.slice(-HISTORY_MAX);
+        }
+        // Speech playback simulation: for non-listen, schedule a synthetic response message
+        if (normalized !== '<listen>') {
+          console.log('Duplex Lab: response', normalized, 'in', latency, 'ms');
+        } else {
+          console.log('Duplex Lab: listen tick', tickCount + 1);
+        }
+      } catch (e: any) {
+        console.error('Lab tick error:', e);
+        appendRow(tickCount + 1, heard, '<listen>', undefined, 600);
+      }
+    }, 600);
+  }).catch((err) => {
+    alert('Microphone access is required for the Duplex Lab. Please allow it in your browser settings.');
+    console.error('Mic error:', err);
+  });
+}
+
+function stopStream() {
+  running = false;
+  if (timer) clearInterval(timer);
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
+  console.log('Lab stream stopped. Total ticks:', tickCount);
+}
+
+window.addEventListener('beforeunload', () => { if (timer) clearInterval(timer); });
+</script>
+</body>
+</html>

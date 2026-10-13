@@ -24,7 +24,10 @@
     "test:duplex": "node tests/duplex-data.test.mjs && node tests/duplex-natural-corpus.test.mjs",
     "data:duplex:natural": "node scripts/duplex/generate-natural-corpus.mjs",
     "lora:train": "node scripts/duplex/run-lora.mjs",
-    "lora:smoke": "node scripts/duplex/run-lora.mjs --config scripts/duplex/lora-config-smoke.json"
+    "lora:smoke": "node scripts/duplex/run-lora.mjs --config scripts/duplex/lora-config-smoke.json",
+    "duplex:evaluate": "node scripts/duplex/evaluate-adapter.mjs --adapter /Volumes/AI/Datasets/jarvis-duplex/adapters-qwen35-9b --dataset /Volumes/AI/Datasets/jarvis-duplex/test.jsonl --samples 5 --out /Volumes/AI/Datasets/jarvis-duplex/evaluations/heldout-",
+    "duplex:evaluate:smoke": "node scripts/duplex/evaluate-adapter.mjs --adapter /Volumes/AI/Datasets/jarvis-duplex/adapters-qwen35-9b --dataset /Volumes/AI/Datasets/jarvis-duplex/test.jsonl --samples 5 --smoke --out /Volumes/AI/Datasets/jarvis-duplex/evaluations/smoke-"
+
   },
   "dependencies": {
     "@ricky0123/vad-web": "^0.0.31",

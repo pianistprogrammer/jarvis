@@ -1,6 +1,7 @@
 import express from 'express'
 import { createServer } from 'node:http'
 import { mkdir } from 'node:fs/promises'
+import fs from 'node:fs'
 import path from 'node:path'
 import { WebSocketServer, WebSocket } from 'ws'
 import { config } from './config.js'
@@ -81,8 +82,16 @@ app.post('/api/tts', async (req, res) => {
 })
 
 const dist = path.resolve('dist')
+// Duplex Lab endpoint for VAD-free 600ms adapter test
+app.get('/api/duplex/status', (_req, res) => {
+  res.json({ running: true, adapterPath: require('./config.js').config.duplexAdapterPath || '', endpointUrl: require('./config.js').config.duplexEndpointUrl || '', windowMs: 600 })
+})
 mountBrowserProxy(app)
 app.use(express.static(dist))
+app.get('/duplex-lab', (_req, res) => {
+  try { res.type('html').send(fs.readFileSync(path.resolve(dist, 'duplex-lab.html'), 'utf8')) }
+  catch { res.redirect('/') }
+})
 app.get('/{*splat}', (_req, res) => res.sendFile(path.join(dist, 'index.html')))
 
 const server = createServer(app)
