@@ -1,6 +1,6 @@
 /// Minimal developer-facing Duplex Lab
 /// Continuous 600ms capture with no VAD; feeds adapter endpoint.
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useRef, useState, useCallback } from 'react'
 
 function DuplexLab() {
   const [running, setRunning] = useState(false)
@@ -18,11 +18,9 @@ function DuplexLab() {
     historyRef.current = []
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
     audioRef.current = ctx
-    navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1 } }).then((stream) => {
-      const source = ctx.createMediaStreamSource(stream)
+    navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1 } }).then(() => {
       const processor = ctx.createScriptProcessor(4096, 1, 1)
       const buffers: Int16Array[] = []
-      let lastWindowMs = 0
 
       processor.onaudioprocess = (e) => {
         if (!running) return
@@ -36,7 +34,6 @@ function DuplexLab() {
         if (!running) return
         if (buffers.length === 0) return
         const chunkSamples = 0.6 * 16000 // 9600 samples = 600ms
-        const needed = Math.floor(chunkSamples / buffers.reduce((sum, b) => sum + b.length, 0))
         const combined = new Int16Array(Math.min(chunkSamples, buffers.reduce((sum, b) => sum + b.length, 0)))
         let pos = 0
         for (const buf of buffers) {
