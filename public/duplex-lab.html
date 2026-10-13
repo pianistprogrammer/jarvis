@@ -221,8 +221,8 @@ import { createSpeechContext, isSubstantiveSpeech, selectSpokenAction } from '/d
     $('modelLatency').textContent = modelMs + ' ms';
     $('latency').textContent = audibleMs === null ? '—' : audibleMs + ' ms';
     const listen = /^<listen>/i.test(completion);
-    $('llmState').textContent = listen ? 'LISTENING…' : 'DECIDING';
-    $('panelCaption').textContent = listen ? 'listening…' : completion.replace(/^<(?:backchannel|respond)>\s*/i, '').slice(0, 32);
+    $('llmState').textContent = listen ? (speaking ? 'SPEAKING' : 'LISTENING…') : 'DECIDING';
+    if (!speaking) $('panelCaption').textContent = listen ? 'listening…' : completion.replace(/^<(?:backchannel|respond)>\s*/i, '').slice(0, 32);
   }
 
   async function processWindow(samples, id, capturedAt) {
@@ -268,7 +268,6 @@ import { createSpeechContext, isSubstantiveSpeech, selectSpokenAction } from '/d
         return;
       }
 
-      if (/^<listen>\s*$/i.test(completion) && speaking) stopSpeech();
       const action = selectSpokenAction(completion, chunk.wordCount);
       const backchannelTag = /^<backchannel>/i.test(completion);
       const backchannelAllowed = action?.action !== 'backchannel' || performance.now() - lastBackchannelAt >= 8000;
