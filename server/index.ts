@@ -92,6 +92,7 @@ app.get('/duplex-lab', (_req, res) => {
   const builtPage = path.join(dist, 'duplex-lab.html')
   const sourcePage = path.resolve('public/duplex-lab.html')
   const page = fs.existsSync(builtPage) ? builtPage : sourcePage
+  res.set('Cache-Control', 'no-store, max-age=0')
   res.sendFile(page)
 })
 app.get('/{*splat}', (_req, res) => res.sendFile(path.join(dist, 'index.html')))
